@@ -1,0 +1,10 @@
+{
+        "tokenListUrl": "https://raw.githubusercontent.com/telosnetwork/token-list/main/telosmain.json",
+        "nodeosUrl": "https://mainnet.telos.net",
+        "hyperionUrl": "https://mainnet.telos.net",
+        "dbHost": "localhost",
+        "dbPort": 5455,
+        "dbName": "obeindex",
+        "dbUser": "postgres",
+        "dbPass": "postgres"
+}
