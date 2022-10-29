@@ -89,6 +89,7 @@ export default class TokenPoller {
             code: token.account,
             scope: account,
             table: 'accounts',
+            type: AccountRow,
             limit: 200
         });
 
@@ -96,9 +97,7 @@ export default class TokenPoller {
             console.error(`Unable to find balance for ${account.toString()} in ${token.account} with symbol ${token.symbol}`);
         } else {
             for (const row of response.rows) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                const accountRow: AccountRow = row;
-                const balance = this.balanceToIntString(accountRow.balance);
+                const balance = String(row.balance.units);
                 const accountStr = account.toString();
                 const query = sql`
                     INSERT INTO balances (token, account, balance)
@@ -109,11 +108,5 @@ export default class TokenPoller {
                 await this.indexer.dbPool?.query(query);
             }
         }
-    }
-
-    private balanceToIntString(balance: string) : string {
-        const decimalBalance = balance.split(' ')[0];
-        const intBalance = decimalBalance.replace('.', '').replace(/^0*/, '');
-        return intBalance === '' ? '0' : intBalance;
     }
 }

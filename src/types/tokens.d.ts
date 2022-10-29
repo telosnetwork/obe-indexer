@@ -20,6 +20,7 @@ export interface TokenListResponse {
     data: TokenList
 }
 
-export interface AccountRow {
-    balance: string
+@Struct.type('account')
+export class AccountRow extends Struct {
+    @Struct.field(Asset) balance!: Asset
 }
