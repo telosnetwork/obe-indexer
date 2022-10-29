@@ -29,6 +29,7 @@ export default class TokenPoller {
     }
 
     async run() {
+        console.log(`Starting do tokens..`)
         for (const token of this.tokens) {
             try {
                 await this.doToken(token);
@@ -36,6 +37,7 @@ export default class TokenPoller {
                 console.error(`Failure in doToken for ${token.name}`, e);
             }
         }
+        console.log(`Do tokens complete!!`)
     }
 
     private async doToken(token: Token) {
@@ -56,6 +58,7 @@ export default class TokenPoller {
     }
 
     private async loadHolders(token: Token) {
+        console.log(`Starting full load of ${token.name}`);
         let more = true;
         let nextKey = '';
         let count = 0;
@@ -67,6 +70,7 @@ export default class TokenPoller {
                 lower_bound: nextKey,
                 limit: 500
             })
+
             if (response.more && response.more !== '') {
                 more = true;
                 nextKey = response.more;
@@ -75,19 +79,36 @@ export default class TokenPoller {
             }
             count += response.rows.length;
             holders = holders.concat(response.rows.map(r => Name.from(r.scope)));
-            break;
+            console.log(`Found ${count} holders for ${token.name}`);
         }
 
-        console.log(`Found ${count} holders for ${token.name}`);
+        console.log(`Loading balances for ${count} total holders of ${token.name}`);
+        let holderPromiseBatch = [];
+        const batchSize = 10;
+        let loadedCount = 0;
         for (const holder of holders) {
-            await this.loadHolder(token, holder);
+            holderPromiseBatch.push(this.loadHolder(token, holder));
+
+            if (holderPromiseBatch.length >= batchSize) {
+                loadedCount += holderPromiseBatch.length;
+                await Promise.all(holderPromiseBatch);
+                holderPromiseBatch =[];
+                console.log(`Loaded ${loadedCount} $${token.name} accounts...`);
+            }
         }
+
+        if (holderPromiseBatch.length >= 1) {
+            loadedCount += holderPromiseBatch.length;
+            await Promise.all(holderPromiseBatch);
+            console.log(`Loaded ${loadedCount} ${token.name} accounts...`);
+        }
+        console.log(`${token.name} all ${count} completed`);
     }
 
     private async loadHolder(token: Token, account: Name) {
         const response = await this.chainApi.get_table_rows({
             code: token.account,
-            scope: account,
+            scope: `${String(account)} `,
             table: 'accounts',
             limit: 200
         });
