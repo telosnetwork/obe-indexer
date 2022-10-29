@@ -100,12 +100,13 @@ export default class TokenPoller {
                 const accountRow: AccountRow = row;
                 const balance = this.balanceToIntString(accountRow.balance);
                 const accountStr = account.toString();
-                await this.indexer.dbPool?.query(sql`
+                const query = sql`
                     INSERT INTO balances (token, account, balance)
-                    VALUES ${token.id}, ${accountStr}, ${balance}
+                    VALUES (${token.id}, ${accountStr}, ${balance})
                     ON CONFLICT ON CONSTRAINT balances_pkey
                     DO UPDATE
-                    SET balance = ${balance}`);
+                    SET balance = ${balance}`
+                await this.indexer.dbPool?.query(query);
             }
         }
     }
