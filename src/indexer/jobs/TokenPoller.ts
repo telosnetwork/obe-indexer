@@ -1,8 +1,13 @@
 import axios from 'axios'
-import { AccountRow, Token, TokenList, TokenRow } from '../../types/tokens'
+import { Token, TokenList, TokenRow } from '../../types/tokens'
 import Indexer from '../Indexer'
 import { sql } from 'slonik'
-import { ChainAPI, Name } from '@greymass/eosio'
+import { Asset, ChainAPI, Name, Struct } from '@greymass/eosio'
+
+@Struct.type('account')
+export class AccountRow extends Struct {
+    @Struct.field(Asset) balance!: Asset
+}
 
 export default class TokenPoller {
     private tokens: Token[] = []
