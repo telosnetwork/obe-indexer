@@ -19,7 +19,3 @@ export interface TokenRow extends Row{
 export interface TokenListResponse {
     data: TokenList
 }
-
-export interface AccountRow {
-    balance: string
-}
