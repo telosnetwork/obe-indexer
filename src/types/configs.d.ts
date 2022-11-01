@@ -1,6 +1,7 @@
-import {APIClient} from "@greymass/eosio";
-
 export interface IndexerConfig {
+    apiAddress: string
+    apiPort: number
+    apiHost: string
     tokenListUrl: string
     nodeosUrl: string
     hyperionUrl: string
@@ -9,4 +10,10 @@ export interface IndexerConfig {
     dbName: string
     dbUser: string
     dbPass: string
+}
+
+export interface RetryFetchOpts {
+    attempts: number
+    delay: number
+    silent: boolean
 }

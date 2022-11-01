@@ -2,12 +2,17 @@ import {IndexerConfig} from "../types/configs";
 import TokenPoller from "./jobs/TokenPoller";
 import {APIClient} from "@greymass/eosio";
 import axios, {AxiosInstance} from "axios";
+
 import {createPool, DatabasePool} from "slonik";
 import {
     createQueryLoggingInterceptor
 } from 'slonik-interceptor-query-logging';
 
-import fetch from "node-fetch";
+import {makeRetryFetch, sleep} from "../util/utils";
+import {createLogger} from "../util/logger";
+
+const RUN_LOOP_SLEEP = 1000;
+const logger = createLogger('Indexer')
 
 export default class Indexer {
 
@@ -19,6 +24,7 @@ export default class Indexer {
 
     private constructor(config: IndexerConfig) {
         this.config = config;
+        const fetch = makeRetryFetch({delay: 1000, attempts: 100, silent: false})
         this.antelopeCore = new APIClient({"url": this.config.nodeosUrl, fetch});
         this.hyperion = axios.create({
             baseURL: this.config.hyperionUrl
@@ -43,18 +49,34 @@ export default class Indexer {
         ];
 
         // TODO: configure this or just disable in production code
-        const opts = {interceptors};
+        //const opts = {interceptors};
+        const opts = {};
 
         try {
             const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
             this.dbPool = await createPool(connectionString, opts);
         } catch (e) {
-            console.error(`Failed creating db pool`, e);
+            logger.error(`Failed creating db pool`, e);
         }
     }
 
-     async run() {
+    async run() {
+        await this.initAll()
+        while (true) {
+            try {
+                await this.runAll()
+            } catch (e) {
+                logger.error(`Error in run loop`, e)
+            }
+            await sleep(RUN_LOOP_SLEEP)
+        }
+    }
+
+    private async initAll() {
         await this.tokenPoller.init();
+    }
+
+    private async runAll() {
         await this.tokenPoller.run();
     }
 

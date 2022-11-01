@@ -1,18 +1,30 @@
 import axios from 'axios'
-import { Token, TokenList, TokenRow } from '../../types/tokens'
+import {Token, TokenList, TokenRow} from '../../types/tokens'
 import Indexer from '../Indexer'
-import { sql } from 'slonik'
-import { Asset, ChainAPI, Name, Struct } from '@greymass/eosio'
+import {sql} from 'slonik'
+import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
+import {createLogger} from "../../util/logger";
 
 @Struct.type('account')
 export class AccountRow extends Struct {
     @Struct.field(Asset) balance!: Asset
 }
 
+@Struct.type('stat')
+export class StatRow extends Struct {
+    @Struct.field(Asset) supply!: Asset
+}
+
+const logger = createLogger('TokenPoller')
+
+const POLL_INTERVAL = 2 * 60 * 1000
+
 export default class TokenPoller {
     private tokens: Token[] = []
     private indexer: Indexer
     private chainApi: ChainAPI
+    private lastPollTime: number = 0
+    private currentLibBlock: number = 0
 
     constructor(indexer: Indexer) {
         this.indexer = indexer
@@ -23,8 +35,9 @@ export default class TokenPoller {
         return this.loadTokenList()
     }
 
+    // TODO: this on some hourly interval
     async loadTokenList() {
-        const { data, status } = await axios.get<TokenList>(
+        const {data, status} = await axios.get<TokenList>(
             this.indexer.config.tokenListUrl
         )
         if (status !== 200) {
@@ -39,44 +52,94 @@ export default class TokenPoller {
     }
 
     async run() {
-        console.log(`Starting do tokens..`)
+        const now = new Date();
+        if ((this.lastPollTime + POLL_INTERVAL) > now.getTime()) {
+            return
+        }
+        this.lastPollTime = now.getTime()
+        logger.info(`Start of all tokens : ${now}`)
+        logger.info(`Starting do tokens..`)
         for (const token of this.tokens) {
             try {
                 await this.doToken(token)
             } catch (e) {
-                console.error(`Failure in doToken for ${token.name}`, e)
+                logger.error(`Failure in doToken for ${token.name}`, e)
             }
         }
-        console.log(`Do tokens complete!!`)
+        logger.info(`Do tokens complete!!`)
+        const end = new Date();
+        logger.info(`End of all tokens : ${end}`);
     }
 
     private async doToken(token: Token) {
-        const lastBlock = await this.getLastBlock(token)
+        const start = new Date();
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+        logger.info(`Start of ${token.name} : ${start}`);
+        const lastBlock = await this.getLastBlock(token);
+        await this.setLib();
+        const currentLib = this.currentLibBlock
+
         if (lastBlock == 0) {
-            await this.loadHolders(token)
+            await this.doFullTokenLoad(currentLib, token);
+        } else {
+            await this.pollTransfersSince(lastBlock, token);
         }
+        const end = new Date();
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+        logger.info(`End of ${token.name} : ${end}`);
     }
 
-    private async getLastBlock(token: Token) {
+    private async getLastBlock(token: Token): Promise<number> {
         const tokenRow = await this.indexer.dbPool?.maybeOne(
-            sql`SELECT last_block from tokens where id=${token.id}`
+            sql`SELECT last_block
+                from tokens
+                where id = ${token.id}`
         )
         if (tokenRow) {
-            return tokenRow.last_block
+            return tokenRow.last_block as number
         }
 
         await this.indexer.dbPool?.query(
-            sql`INSERT INTO tokens (id, last_block) VALUES(${token.id}, 0)`
+            sql`INSERT INTO tokens (id, last_block)
+                VALUES (${token.id}, 0)`
         )
         return 0
     }
 
-    private async loadHolders(token: Token) {
-        console.log(`Starting full load of ${token.name}`)
+    private async getStatRow(token: Token): Promise<StatRow | undefined> {
+        const statResponse = await this.indexer.antelopeCore.v1.chain.get_table_rows({
+            code: token.account,
+            scope: token.symbol,
+            table: 'stat',
+            limit: 500,
+            type: StatRow
+        });
+
+        if (!statResponse || statResponse.rows.length !== 1) {
+            logger.error(`Unable to find stat row for token: ${token.id}`)
+            return
+        }
+
+        return statResponse.rows[0];
+    }
+
+    private async doFullTokenLoad(currentBlock: number, token: Token) {
+        logger.info(`Starting full load of ${token.name}`)
         let more = true
         let nextKey = ''
         let count = 0
         let holders: Name[] = []
+
+        const statRow: StatRow | undefined = await this.getStatRow(token)
+        if (!statRow) {
+            logger.error(`Cannot do full token load, unable to find stat row for ${token.id}`)
+            return
+        }
+
+        await this.updateTokenSupply(token, statRow);
+
+        await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${currentBlock} WHERE id = ${token.id}`)
+
         while (more) {
             const response = await this.chainApi.get_table_by_scope({
                 code: token.account,
@@ -95,35 +158,45 @@ export default class TokenPoller {
             holders = holders.concat(
                 response.rows.map((r) => Name.from(r.scope))
             )
-            console.log(`Found ${count} holders for ${token.name}`)
+            logger.info(`Found ${count} holders for ${token.name}`)
         }
 
-        console.log(
+        logger.info(
             `Loading balances for ${count} total holders of ${token.name}`
         )
+
+        await this.loadHolders(currentBlock, token, holders)
+
+        logger.info(`${token.name} all ${count} completed`)
+
+        await this.indexer.dbPool?.query(sql`DELETE FROM balances WHERE block != ${currentBlock}`)
+
+        logger.info(`Removed all balances not seen on this full load of ${token.name}`)
+    }
+
+    private async loadHolders(currentBlock: number, token: Token, holders: Name[] | Set<Name>) {
         let holderPromiseBatch = []
         const batchSize = 10
         let loadedCount = 0
         for (const holder of holders) {
-            holderPromiseBatch.push(this.loadHolder(token, holder))
+            holderPromiseBatch.push(this.loadHolder(currentBlock, token, holder))
 
             if (holderPromiseBatch.length >= batchSize) {
                 loadedCount += holderPromiseBatch.length
                 await Promise.all(holderPromiseBatch)
                 holderPromiseBatch = []
-                console.log(`Loaded ${loadedCount} $${token.name} accounts...`)
+                logger.info(`Loaded ${loadedCount} $${token.name} accounts...`)
             }
         }
 
         if (holderPromiseBatch.length >= 1) {
             loadedCount += holderPromiseBatch.length
             await Promise.all(holderPromiseBatch)
-            console.log(`Loaded ${loadedCount} ${token.name} accounts...`)
+            logger.info(`Loaded ${loadedCount} ${token.name} accounts...`)
         }
-        console.log(`${token.name} all ${count} completed`)
     }
 
-    private async loadHolder(token: Token, account: Name) {
+    private async loadHolder(currentBlock: number, token: Token, account: Name) {
         const response = await this.chainApi.get_table_rows({
             code: token.account,
             scope: `${String(account)} `,
@@ -133,7 +206,7 @@ export default class TokenPoller {
         })
 
         if (!response || response.rows.length === 0) {
-            console.error(
+            logger.error(
                 `Unable to find balance for ${account.toString()} in ${
                     token.account
                 } with symbol ${token.symbol}`
@@ -143,13 +216,74 @@ export default class TokenPoller {
                 const balance = String(row.balance.units)
                 const accountStr = account.toString()
                 const query = sql`
-                    INSERT INTO balances (token, account, balance)
-                    VALUES (${token.id}, ${accountStr}, ${balance})
+                    INSERT INTO balances (block, token, account, balance)
+                    VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance})
                     ON CONFLICT ON CONSTRAINT balances_pkey
-                    DO UPDATE
-                    SET balance = ${balance}`
+                        DO UPDATE
+                        SET balance = ${balance},
+                            block = ${currentBlock}`
                 await this.indexer.dbPool?.query(query)
             }
         }
+    }
+
+    private async pollTransfersSince(lastBlock: number, token: Token) {
+        const startBlockResponse = await this.chainApi.get_block(lastBlock)
+        const startISO = new Date(startBlockResponse.timestamp.toMilliseconds()).toISOString();
+        const endBlockResponse = await this.chainApi.get_block(this.currentLibBlock)
+        const endBlock = endBlockResponse.block_num.toNumber();
+        const endISO = new Date(endBlockResponse.timestamp.toMilliseconds()).toISOString();
+
+        const statRow: StatRow | undefined = await this.getStatRow(token)
+        if (!statRow) {
+            logger.error(`Cannot do incremental updates, unable to find stat row for ${token.id}`)
+            return
+        }
+
+        await this.updateTokenSupply(token, statRow);
+
+        const params = {
+            after: startISO,
+            before: endISO,
+            code: token.account,
+            table: 'accounts'
+        }
+        // TODO: paginate here
+        const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, { params })
+        if (response.data.total.value == 0) {
+            logger.info(`${token.name} had no transfers between ${startISO} and ${endISO}`)
+            const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${endBlock} WHERE id = ${token.id}`)
+            return;
+        }
+
+        let holders = new Set<Name>()
+        for (const delta of response.data.deltas) {
+            if (delta.data.symbol !== token.symbol) {
+                // This is not an error, a contract can store many different symbols
+                continue
+            }
+
+            if (delta.code !== token.account) {
+                logger.error(`Got a delta with incorrect code, expected ${token.account} but got ${delta.code}`)
+                continue
+            }
+
+            holders.add(delta.scope)
+        }
+
+        logger.info(`Found ${holders.size} account balances changed for ${token.name} between ${startISO}-${endISO}`)
+        await this.loadHolders(endBlock, token, holders);
+
+        const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${endBlock} WHERE id = ${token.id}`)
+    }
+
+    private async setLib() {
+        // TODO: maybe here we should look at how long ago this was and skip it if it's say... less than 5 seconds old
+        const getInfo = await this.chainApi.get_info()
+        this.currentLibBlock = getInfo.last_irreversible_block_num.toNumber()
+    }
+
+    private async updateTokenSupply(token: Token, statRow: StatRow) {
+        await this.indexer.dbPool?.query(sql`UPDATE tokens SET supply = ${statRow.supply.toString()} WHERE id = ${token.id}`)
     }
 }
