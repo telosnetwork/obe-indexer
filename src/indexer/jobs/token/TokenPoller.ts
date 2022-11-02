@@ -1,9 +1,10 @@
 import axios from 'axios'
-import {Token, TokenList, TokenRow} from '../../types/tokens'
-import Indexer from '../Indexer'
+import {Token, TokenList, TokenRow} from '../../../types/tokens'
+import Indexer from '../../Indexer'
 import {sql} from 'slonik'
 import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
-import {createLogger} from "../../util/logger";
+import {createLogger} from "../../../util/logger";
+import {updateRexBalances} from "./TelosHandler";
 
 @Struct.type('account')
 export class AccountRow extends Struct {
@@ -17,13 +18,18 @@ export class StatRow extends Struct {
 
 const logger = createLogger('TokenPoller')
 
+// 2min for updating token balances
 const POLL_INTERVAL = 2 * 60 * 1000
+
+// 12hrs for polling REX balances
+const REX_POLL_INTERVAL = 12 * 60 * 60 * 1000
 
 export default class TokenPoller {
     private tokens: Token[] = []
     private indexer: Indexer
     private chainApi: ChainAPI
     private lastPollTime: number = 0
+    private lastRexTime: number = 0
     private currentLibBlock: number = 0
 
     constructor(indexer: Indexer) {
@@ -57,7 +63,6 @@ export default class TokenPoller {
             return
         }
         this.lastPollTime = now.getTime()
-        logger.info(`Start of all tokens : ${now}`)
         logger.info(`Starting do tokens..`)
         for (const token of this.tokens) {
             try {
@@ -67,26 +72,36 @@ export default class TokenPoller {
             }
         }
         logger.info(`Do tokens complete!!`)
-        const end = new Date();
-        logger.info(`End of all tokens : ${end}`);
+
     }
 
     private async doToken(token: Token) {
-        const start = new Date();
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-        logger.info(`Start of ${token.name} : ${start}`);
-        const lastBlock = await this.getLastBlock(token);
-        await this.setLib();
+        logger.info(`Start of ${token.name}`)
+        const lastBlock = await this.getLastBlock(token)
+        await this.setLib()
         const currentLib = this.currentLibBlock
 
         if (lastBlock == 0) {
-            await this.doFullTokenLoad(currentLib, token);
+            await this.doFullTokenLoad(currentLib, token)
         } else {
-            await this.pollTransfersSince(lastBlock, token);
+            await this.pollTransfersSince(lastBlock, token)
         }
-        const end = new Date();
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-        logger.info(`End of ${token.name} : ${end}`);
+        if (token.id == `eosio.token:TLOS`) {
+            await this.doStakeBalances()
+        }
+        logger.info(`End of ${token.name}`)
+    }
+
+    private async doStakeBalances() {
+        const now = new Date().getTime()
+        if ((this.lastRexTime + REX_POLL_INTERVAL) > now) {
+            return;
+        }
+
+        this.lastRexTime = now
+        logger.info(`Doing stake balances for TLOS`)
+        await updateRexBalances(this.indexer)
+        logger.info(`Done doing stake balances for TLOS`)
     }
 
     private async getLastBlock(token: Token): Promise<number> {
@@ -138,7 +153,9 @@ export default class TokenPoller {
 
         await this.updateTokenSupply(token, statRow);
 
-        await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${currentBlock} WHERE id = ${token.id}`)
+        await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                             SET last_block = ${currentBlock}
+                                             WHERE id = ${token.id}`)
 
         while (more) {
             const response = await this.chainApi.get_table_by_scope({
@@ -169,7 +186,9 @@ export default class TokenPoller {
 
         logger.info(`${token.name} all ${count} completed`)
 
-        await this.indexer.dbPool?.query(sql`DELETE FROM balances WHERE block != ${currentBlock}`)
+        await this.indexer.dbPool?.query(sql`DELETE
+                                             FROM balances
+                                             WHERE block != ${currentBlock}`)
 
         logger.info(`Removed all balances not seen on this full load of ${token.name}`)
     }
@@ -221,7 +240,7 @@ export default class TokenPoller {
                     ON CONFLICT ON CONSTRAINT balances_pkey
                         DO UPDATE
                         SET balance = ${balance},
-                            block = ${currentBlock}`
+                            block   = ${currentBlock}`
                 await this.indexer.dbPool?.query(query)
             }
         }
@@ -249,10 +268,12 @@ export default class TokenPoller {
             table: 'accounts'
         }
         // TODO: paginate here
-        const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, { params })
+        const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, {params})
         if (response.data.total.value == 0) {
             logger.info(`${token.name} had no transfers between ${startISO} and ${endISO}`)
-            const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${endBlock} WHERE id = ${token.id}`)
+            const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                                                      SET last_block = ${endBlock}
+                                                                      WHERE id = ${token.id}`)
             return;
         }
 
@@ -274,7 +295,9 @@ export default class TokenPoller {
         logger.info(`Found ${holders.size} account balances changed for ${token.name} between ${startISO}-${endISO}`)
         await this.loadHolders(endBlock, token, holders);
 
-        const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${endBlock} WHERE id = ${token.id}`)
+        const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                                                  SET last_block = ${endBlock}
+                                                                  WHERE id = ${token.id}`)
     }
 
     private async setLib() {
@@ -284,6 +307,8 @@ export default class TokenPoller {
     }
 
     private async updateTokenSupply(token: Token, statRow: StatRow) {
-        await this.indexer.dbPool?.query(sql`UPDATE tokens SET supply = ${statRow.supply.toString()} WHERE id = ${token.id}`)
+        await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                             SET supply = ${statRow.supply.toString()}
+                                             WHERE id = ${token.id}`)
     }
 }

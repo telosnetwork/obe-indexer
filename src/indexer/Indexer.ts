@@ -1,5 +1,5 @@
 import {IndexerConfig} from "../types/configs";
-import TokenPoller from "./jobs/TokenPoller";
+import TokenPoller from "./jobs/token/TokenPoller";
 import {APIClient} from "@greymass/eosio";
 import axios, {AxiosInstance} from "axios";
 
