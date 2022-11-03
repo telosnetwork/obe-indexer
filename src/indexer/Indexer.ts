@@ -1,5 +1,4 @@
 import {IndexerConfig} from "../types/configs";
-import TokenPoller from "./jobs/token/TokenPoller";
 import {APIClient} from "@greymass/eosio";
 import axios, {AxiosInstance} from "axios";
 
@@ -10,6 +9,7 @@ import {
 
 import {makeRetryFetch, sleep} from "../util/utils";
 import {createLogger} from "../util/logger";
+import TokenPoller from "./jobs/token/TokenPoller";
 
 const RUN_LOOP_SLEEP = 1000;
 const logger = createLogger('Indexer')

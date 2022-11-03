@@ -75,10 +75,10 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             holders: holders.rows.map((balanceRow): HoldersRow => {
                 return {
                     account: String(balanceRow.account),
-                    total_balance: balanceToDecimals(String(balanceRow.total_balance), decimals),
-                    liquid_balance: balanceToDecimals(String(balanceRow.liquid_balance), decimals),
-                    rex_stake: balanceToDecimals(String(balanceRow.rex_stake), decimals),
-                    resource_stake: balanceToDecimals(String(balanceRow.resource_stake), decimals),
+                    total_balance: balanceToDecimals(String(balanceRow.total_balance || 0), decimals),
+                    liquid_balance: balanceToDecimals(String(balanceRow.liquid_balance || 0), decimals),
+                    rex_stake: balanceToDecimals(String(balanceRow.rex_stake || 0), decimals),
+                    resource_stake: balanceToDecimals(String(balanceRow.resource_stake || 0), decimals),
 
                 }
             })

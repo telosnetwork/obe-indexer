@@ -36,6 +36,7 @@ export class RexPool extends Struct {
     @Struct.field(UInt64) loan_num!: UInt64
 }
 
+
 export const updateRexBalances = async (token: Token, currentBlock: number, indexer: Indexer) => {
     const rexPoolResponse = await indexer.antelopeCore.v1.chain.get_table_rows({
         code: 'eosio',
@@ -61,10 +62,10 @@ export const updateRexBalances = async (token: Token, currentBlock: number, inde
             VALUES (${currentBlock}, ${token.id}, ${account}, ${rexStakeStr}, ${rexStakeStr}, 0, 0)
             ON CONFLICT ON CONSTRAINT balances_pkey
                 DO UPDATE
-                SET rex_stake     = ${rexStakeStr},
-                    total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) +
+                SET rex_stake     = EXCLUDED.rex_stake,
+                    total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(EXCLUDED.rex_stake, 0) +
                                     COALESCE(balances.resource_stake, 0),
-                    block         = ${currentBlock}`
+                    block         = EXCLUDED.block`
         const updated = await indexer.dbPool?.query(query)
         if (++count % 50 === 0)
             logger.info(`Processed ${count} rex balances, current account: ${account}`)

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import {Token, TokenList, TokenRow} from '../../../types/tokens'
+import {Token, TokenList} from '../../../types/tokens'
 import Indexer from '../../Indexer'
 import {sql} from 'slonik'
 import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
@@ -239,9 +239,9 @@ export default class TokenPoller {
                     VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance}, ${balance}, 0, 0)
                     ON CONFLICT ON CONSTRAINT balances_pkey
                         DO UPDATE
-                        SET liquid_balance = ${balance},
-                            total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) + COALESCE(balances.resource_stake, 0),
-                            block   = ${currentBlock}`
+                        SET liquid_balance = EXCLUDED.liquid_balance,
+                            total_balance = COALESCE(EXCLUDED.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) + COALESCE(balances.resource_stake, 0),
+                            block   = EXCLUDED.block`
                 await this.indexer.dbPool?.query(query)
             }
         }
