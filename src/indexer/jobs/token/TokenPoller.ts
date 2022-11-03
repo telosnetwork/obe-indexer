@@ -1,9 +1,10 @@
 import axios from 'axios'
-import {Token, TokenList, TokenRow} from '../../types/tokens'
-import Indexer from '../Indexer'
+import {Token, TokenList, TokenRow} from '../../../types/tokens'
+import Indexer from '../../Indexer'
 import {sql} from 'slonik'
 import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
-import {createLogger} from "../../util/logger";
+import {createLogger} from "../../../util/logger";
+import {updateRexBalances} from "./TelosHandler";
 
 @Struct.type('account')
 export class AccountRow extends Struct {
@@ -17,14 +18,19 @@ export class StatRow extends Struct {
 
 const logger = createLogger('TokenPoller')
 
+// 2min for updating token balances
 const POLL_INTERVAL = 2 * 60 * 1000
+
+// 12hrs for polling REX balances
+const REX_POLL_INTERVAL = 12 * 60 * 60 * 1000
 
 export default class TokenPoller {
     private tokens: Token[] = []
     private indexer: Indexer
     private chainApi: ChainAPI
-    private lastPollTime: number = 0
-    private currentLibBlock: number = 0
+    private lastPollTime = 0
+    private lastRexTime = 0
+    private currentLibBlock = 0
 
     constructor(indexer: Indexer) {
         this.indexer = indexer
@@ -57,36 +63,45 @@ export default class TokenPoller {
             return
         }
         this.lastPollTime = now.getTime()
-        logger.info(`Start of all tokens : ${now}`)
         logger.info(`Starting do tokens..`)
         for (const token of this.tokens) {
             try {
                 await this.doToken(token)
+                // TODO: Some cleaup action that finds any balances with zero values for all of liquid/rex/resources and deletes them
             } catch (e) {
-                logger.error(`Failure in doToken for ${token.name}`, e)
+                logger.error(`Failure in doToken for ${token.name}: ${e}`)
             }
         }
         logger.info(`Do tokens complete!!`)
-        const end = new Date();
-        logger.info(`End of all tokens : ${end}`);
     }
 
     private async doToken(token: Token) {
-        const start = new Date();
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-        logger.info(`Start of ${token.name} : ${start}`);
-        const lastBlock = await this.getLastBlock(token);
-        await this.setLib();
+        logger.info(`Start of ${token.name}`)
+        const lastBlock = await this.getLastBlock(token)
+        await this.setLib()
         const currentLib = this.currentLibBlock
 
         if (lastBlock == 0) {
-            await this.doFullTokenLoad(currentLib, token);
+            await this.doFullTokenLoad(currentLib, token)
         } else {
-            await this.pollTransfersSince(lastBlock, token);
+            await this.pollTransfersSince(lastBlock, token)
         }
-        const end = new Date();
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-        logger.info(`End of ${token.name} : ${end}`);
+        if (token.id == `eosio.token:TLOS`) {
+            await this.doStakeBalances(token)
+        }
+        logger.info(`End of ${token.name}`)
+    }
+
+    private async doStakeBalances(token: Token) {
+        const now = new Date().getTime()
+        if ((this.lastRexTime + REX_POLL_INTERVAL) > now) {
+            return;
+        }
+
+        this.lastRexTime = now
+        logger.info(`Doing stake balances for ${token.id}`)
+        await updateRexBalances(token, this.currentLibBlock, this.indexer)
+        logger.info(`Done doing stake balances for TLOS`)
     }
 
     private async getLastBlock(token: Token): Promise<number> {
@@ -138,7 +153,9 @@ export default class TokenPoller {
 
         await this.updateTokenSupply(token, statRow);
 
-        await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${currentBlock} WHERE id = ${token.id}`)
+        await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                             SET last_block = ${currentBlock}
+                                             WHERE id = ${token.id}`)
 
         while (more) {
             const response = await this.chainApi.get_table_by_scope({
@@ -169,7 +186,9 @@ export default class TokenPoller {
 
         logger.info(`${token.name} all ${count} completed`)
 
-        await this.indexer.dbPool?.query(sql`DELETE FROM balances WHERE block != ${currentBlock}`)
+        await this.indexer.dbPool?.query(sql`UPDATE balances
+                                             SET liquid_balance = 0
+                                             WHERE block != ${currentBlock}`)
 
         logger.info(`Removed all balances not seen on this full load of ${token.name}`)
     }
@@ -216,12 +235,13 @@ export default class TokenPoller {
                 const balance = String(row.balance.units)
                 const accountStr = account.toString()
                 const query = sql`
-                    INSERT INTO balances (block, token, account, balance)
-                    VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance})
+                    INSERT INTO balances (block, token, account, liquid_balance, total_balance, rex_stake, resource_stake)
+                    VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance}, ${balance}, 0, 0)
                     ON CONFLICT ON CONSTRAINT balances_pkey
                         DO UPDATE
-                        SET balance = ${balance},
-                            block = ${currentBlock}`
+                        SET liquid_balance = ${balance},
+                            total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) + COALESCE(balances.resource_stake, 0),
+                            block   = ${currentBlock}`
                 await this.indexer.dbPool?.query(query)
             }
         }
@@ -249,14 +269,16 @@ export default class TokenPoller {
             table: 'accounts'
         }
         // TODO: paginate here
-        const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, { params })
+        const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, {params})
         if (response.data.total.value == 0) {
             logger.info(`${token.name} had no transfers between ${startISO} and ${endISO}`)
-            const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${endBlock} WHERE id = ${token.id}`)
+            const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                                                      SET last_block = ${endBlock}
+                                                                      WHERE id = ${token.id}`)
             return;
         }
 
-        let holders = new Set<Name>()
+        const holders = new Set<Name>()
         for (const delta of response.data.deltas) {
             if (delta.data.symbol !== token.symbol) {
                 // This is not an error, a contract can store many different symbols
@@ -274,7 +296,9 @@ export default class TokenPoller {
         logger.info(`Found ${holders.size} account balances changed for ${token.name} between ${startISO}-${endISO}`)
         await this.loadHolders(endBlock, token, holders);
 
-        const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${endBlock} WHERE id = ${token.id}`)
+        const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                                                  SET last_block = ${endBlock}
+                                                                  WHERE id = ${token.id}`)
     }
 
     private async setLib() {
@@ -284,6 +308,8 @@ export default class TokenPoller {
     }
 
     private async updateTokenSupply(token: Token, statRow: StatRow) {
-        await this.indexer.dbPool?.query(sql`UPDATE tokens SET supply = ${statRow.supply.toString()} WHERE id = ${token.id}`)
+        await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                             SET supply = ${statRow.supply.toString()}
+                                             WHERE id = ${token.id}`)
     }
 }

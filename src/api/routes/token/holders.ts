@@ -16,10 +16,22 @@ const holdersRow = Type.Object({
         example: 'accountname',
         description: 'Account name'
     }),
-    balance: Type.String({
+    total_balance: Type.String({
         example: '123456789.0123456789',
-        description: 'A string representation of balance, possibly too large for a Number type, use a big number library to consume it as a number'
-    })
+        description: 'A string representation of total balance, possibly too large for a Number type, use a big number library to consume it as a number'
+    }),
+    liquid_balance: Type.String({
+        example: '123456789.0123456789',
+        description: 'A string representation of liquid balance, possibly too large for a Number type, use a big number library to consume it as a number'
+    }),
+    rex_stake: Type.String({
+        example: '123456789.0123456789',
+        description: 'A string representation of rex stake, possibly too large for a Number type, use a big number library to consume it as a number'
+    }),
+    resource_stake: Type.String({
+        example: '123456789.0123456789',
+        description: 'A string representation of resource stake, possibly too large for a Number type, use a big number library to consume it as a number'
+    }),
 })
 
 type HoldersRow = Static<typeof holdersRow>
@@ -57,13 +69,17 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
 
         const decimals = decimalsFromSupply(String(token.supply))
 
-        const holders = await fastify.dbPool.query(sql`SELECT * FROM balances WHERE token = ${id} ORDER BY balance DESC LIMIT 500`)
+        const holders = await fastify.dbPool.query(sql`SELECT * FROM balances WHERE token = ${id} ORDER BY total_balance DESC LIMIT 500`)
         const holdersResponse: HoldersResponse = {
             totalSupply: String(token.supply),
             holders: holders.rows.map((balanceRow): HoldersRow => {
                 return {
                     account: String(balanceRow.account),
-                    balance: balanceToDecimals(String(balanceRow.balance), decimals)
+                    total_balance: balanceToDecimals(String(balanceRow.total_balance), decimals),
+                    liquid_balance: balanceToDecimals(String(balanceRow.liquid_balance), decimals),
+                    rex_stake: balanceToDecimals(String(balanceRow.rex_stake), decimals),
+                    resource_stake: balanceToDecimals(String(balanceRow.resource_stake), decimals),
+
                 }
             })
         }
