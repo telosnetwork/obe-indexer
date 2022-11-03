@@ -28,9 +28,9 @@ export default class TokenPoller {
     private tokens: Token[] = []
     private indexer: Indexer
     private chainApi: ChainAPI
-    private lastPollTime: number = 0
-    private lastRexTime: number = 0
-    private currentLibBlock: number = 0
+    private lastPollTime = 0
+    private lastRexTime = 0
+    private currentLibBlock = 0
 
     constructor(indexer: Indexer) {
         this.indexer = indexer
@@ -67,12 +67,12 @@ export default class TokenPoller {
         for (const token of this.tokens) {
             try {
                 await this.doToken(token)
+                // TODO: Some cleaup action that finds any balances with zero values for all of liquid/rex/resources and deletes them
             } catch (e) {
-                logger.error(`Failure in doToken for ${token.name}`, e)
+                logger.error(`Failure in doToken for ${token.name}: ${e}`)
             }
         }
         logger.info(`Do tokens complete!!`)
-
     }
 
     private async doToken(token: Token) {
@@ -87,20 +87,20 @@ export default class TokenPoller {
             await this.pollTransfersSince(lastBlock, token)
         }
         if (token.id == `eosio.token:TLOS`) {
-            await this.doStakeBalances()
+            await this.doStakeBalances(token)
         }
         logger.info(`End of ${token.name}`)
     }
 
-    private async doStakeBalances() {
+    private async doStakeBalances(token: Token) {
         const now = new Date().getTime()
         if ((this.lastRexTime + REX_POLL_INTERVAL) > now) {
             return;
         }
 
         this.lastRexTime = now
-        logger.info(`Doing stake balances for TLOS`)
-        await updateRexBalances(this.indexer)
+        logger.info(`Doing stake balances for ${token.id}`)
+        await updateRexBalances(token, this.currentLibBlock, this.indexer)
         logger.info(`Done doing stake balances for TLOS`)
     }
 
@@ -186,8 +186,8 @@ export default class TokenPoller {
 
         logger.info(`${token.name} all ${count} completed`)
 
-        await this.indexer.dbPool?.query(sql`DELETE
-                                             FROM balances
+        await this.indexer.dbPool?.query(sql`UPDATE balances
+                                             SET liquid_balance = 0
                                              WHERE block != ${currentBlock}`)
 
         logger.info(`Removed all balances not seen on this full load of ${token.name}`)
@@ -235,11 +235,12 @@ export default class TokenPoller {
                 const balance = String(row.balance.units)
                 const accountStr = account.toString()
                 const query = sql`
-                    INSERT INTO balances (block, token, account, balance)
-                    VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance})
+                    INSERT INTO balances (block, token, account, liquid_balance, total_balance, rex_stake, resource_stake)
+                    VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance}, ${balance}, 0, 0)
                     ON CONFLICT ON CONSTRAINT balances_pkey
                         DO UPDATE
-                        SET balance = ${balance},
+                        SET liquid_balance = ${balance},
+                            total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) + COALESCE(balances.resource_stake, 0),
                             block   = ${currentBlock}`
                 await this.indexer.dbPool?.query(query)
             }
@@ -277,7 +278,7 @@ export default class TokenPoller {
             return;
         }
 
-        let holders = new Set<Name>()
+        const holders = new Set<Name>()
         for (const delta of response.data.deltas) {
             if (delta.data.symbol !== token.symbol) {
                 // This is not an error, a contract can store many different symbols

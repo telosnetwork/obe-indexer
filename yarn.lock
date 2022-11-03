@@ -1339,6 +1339,11 @@ joycon@^3.1.1:
   resolved "https://registry.yarnpkg.com/joycon/-/joycon-3.1.1.tgz#bce8596d6ae808f8b68168f5fc69280996894f03"
   integrity sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==
 
+js-big-decimal@^1.3.12:
+  version "1.3.12"
+  resolved "https://registry.yarnpkg.com/js-big-decimal/-/js-big-decimal-1.3.12.tgz#cc239fb3df516ff330655e36f29c1888eb07d8b7"
+  integrity sha512-FWAINnjcRoteTgDC6jqyCXgzLZydrlKXLXvI7GizM7gfprrfmtw7mNdn2x1cO51FCEi5eeKPdQe7QDPKwsOBag==
+
 js-sdsl@^4.1.4:
   version "4.1.5"
   resolved "https://registry.yarnpkg.com/js-sdsl/-/js-sdsl-4.1.5.tgz#1ff1645e6b4d1b028cd3f862db88c9d887f26e2a"
