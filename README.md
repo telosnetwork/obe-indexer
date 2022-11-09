@@ -49,9 +49,9 @@ Elevate to psql console
 ```sudo -u postgres psql```
 
 Create user and database:  
-```create user USER with encrypted password 'PASSWORD';```
-```create database DBNAME;```
-```grant all privileges on database yaai to yaai;```
+```create user USER with encrypted password 'PASSWORD';```  
+```create database DBNAME;```  
+```grant all privileges on database yaai to yaai;```  
 
 Clone the OBE Indexer  
 ```git clone https://github.com/telosnetwork/obe-indexer```
