@@ -28,7 +28,8 @@ Now paste all the tables in there and create those too, or write a script and pu
 HERE
 ```
 
-##Operator Setup
+## Operator Setup
+
 Install node v.16  
 ```curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -```
 ```sudo apt-get install -y nodejs```
