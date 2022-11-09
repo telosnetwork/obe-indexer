@@ -30,6 +30,12 @@ HERE
 
 ## Operator Setup
 
+Nodeos Setup:  
+The OBE Indexer does not have functionality for handeling forks so it must be pointed at a nodeos instance running in irreversible mode. More on that can be read here: https://developers.eos.io/manuals/eos/v2.2/nodeos/features/storage-and-read-modes
+
+Within your nodeos config.ini file you will use with the indexer, be sure to include the option:  
+```read-mode = irreversible```
+
 Install node v.16  
 ```curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -```
 ```sudo apt-get install -y nodejs```
@@ -58,7 +64,7 @@ Clone the OBE Indexer
 
 Import tables as the DB user you just created using https://github.com/telosnetwork/obe-indexer/blob/master/src/tables/tokens.sql
 
-Copy example.config.json to config.json and edit it for your DB, Hyp and Nodeos connection. Make sure to note the default port for psql is 5432. The config in git is set differently for the docker dev version.
+Copy example.config.json to config.json and edit it for your DB, Hyp and Nodeos connection. Make sure to note the default port for psql is 5432. The config in git is set differently for the docker dev version. Also be sure the `nodeosUrl` is pointed to your node running in irreversible mode.
 
 Install Yarn  
 ```sudo npm install --global yarn```
