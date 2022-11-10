@@ -43,7 +43,8 @@ export async function paginateTableQuery(api: APIClient, query: any, callback: F
         const response = await api.v1.chain.get_table_rows(query);
         more = response.more
         query.lower_bound = response.next_key
-        for (const row of response.rows) {
+        for (let i = 0; i < response.rows.length; i++) {
+            const row = response.rows[i]
             const callbackReturn = callback(row)
             if (callbackReturn instanceof Promise) {
                 await callbackReturn

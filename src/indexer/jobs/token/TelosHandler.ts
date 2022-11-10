@@ -76,6 +76,6 @@ export const updateRexBalances = async (token: Token, currentBlock: number, inde
                                         total_balance = COALESCE(balances.liquid_balance, 0) +
                                                         COALESCE(balances.rex_stake, 0) +
                                                         COALESCE(balances.resource_stake, 0)
-                                    WHERE block != ${currentBlock}
+                                    WHERE block != ${currentBlock} AND token = ${token.id}
     `)
 }

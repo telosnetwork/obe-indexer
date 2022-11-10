@@ -188,7 +188,7 @@ export default class TokenPoller {
 
         await this.indexer.dbPool?.query(sql`UPDATE balances
                                              SET liquid_balance = 0
-                                             WHERE block != ${currentBlock}`)
+                                             WHERE block != ${currentBlock} AND token = ${token.id}`)
 
         logger.info(`Removed all balances not seen on this full load of ${token.name}`)
     }
