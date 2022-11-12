@@ -15,10 +15,7 @@ import {createPool} from "slonik";
 
 const logger = createLogger('Api')
 
-const PREFIX = `obe`
-
 export default class Api {
-    public static PREFIX: string = PREFIX
 
     private fastify: FastifyInstance
     private config: IndexerConfig
@@ -102,21 +99,21 @@ export default class Api {
             }
         })
         await this.fastify.register(fastifySwaggerUi, {
-            routePrefix: `/v1/${PREFIX}/docs`
+            routePrefix: `/v1/docs`
         })
         await this.fastify.register(fastifyCors, {origin: true})
-        await this.fastify.register(fastifyAutoLoad, { dir: path.join(__dirname, 'routes'), options: { prefix: `/v1/${PREFIX}` } });
+        await this.fastify.register(fastifyAutoLoad, { dir: path.join(__dirname, 'routes'), options: { prefix: `/v1` } });
 
     }
 
     private registerRoutes() {
         // @ts-ignore
         this.fastify.get('/', {prefixTrailingSlash: undefined, schema: { hide: true } }, (request, reply) => {
-            reply.code(307).redirect(`/v1/${PREFIX}/docs`)
+            reply.code(307).redirect(`/v1/docs`)
         });
 
         // @ts-ignore
-        this.fastify.get(`/v1/${PREFIX}/health`, { logLevel: 'fatal', schema: { hide: true } }, (request, reply) => {
+        this.fastify.get(`/v1/health`, { logLevel: 'fatal', schema: { hide: true } }, (request, reply) => {
             reply.code(200).send("Ok!")
         });
 

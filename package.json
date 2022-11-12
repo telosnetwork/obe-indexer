@@ -6,7 +6,7 @@
     "scripts": {
         "lint": "eslint . --ext .ts",
         "lint:fix": "eslint --fix --ext .ts, src",
-        "build": "tsc --build"
+        "build": "rm -rf ./dist && tsc --build"
     },
     "author": "Jesse Schulman <jesse@caleos.io>",
     "license": "MIT",
