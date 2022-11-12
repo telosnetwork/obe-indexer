@@ -1,6 +1,9 @@
 import {RetryFetchOpts} from "../types/configs";
 import {RequestInit} from "node-fetch";
 import {APIClient} from "@greymass/eosio";
+import {createLogger} from "./logger";
+
+const logger = createLogger('utils.ts')
 
 export function makeRetryFetch(retryOpts: RetryFetchOpts) {
     return async (url: string, opts: RequestInit) => {
@@ -40,15 +43,21 @@ export function balanceToDecimals(balance: string, decimals: number): string {
 export async function paginateTableQuery(api: APIClient, query: any, callback: Function) {
     let more = true
     while (more) {
-        const response = await api.v1.chain.get_table_rows(query);
-        more = response.more
-        query.lower_bound = response.next_key
-        for (let i = 0; i < response.rows.length; i++) {
-            const row = response.rows[i]
-            const callbackReturn = callback(row)
-            if (callbackReturn instanceof Promise) {
-                await callbackReturn
+        let response;
+        try {
+            response = await api.v1.chain.get_table_rows(query);
+            more = response.more
+            query.lower_bound = response.next_key
+            for (let i = 0; i < response.rows.length; i++) {
+                const row = response.rows[i]
+                const callbackReturn = callback(row)
+                if (callbackReturn instanceof Promise) {
+                    await callbackReturn
+                }
             }
+        } catch (e: any) {
+            logger.error(`Failed during table pagination ${e.message}`)
+            throw e
         }
     }
 }

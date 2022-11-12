@@ -31,7 +31,7 @@ export class RexPool extends Struct {
     @Struct.field(Asset) total_unlent!: Asset
     @Struct.field(Asset) total_rent!: Asset
     @Struct.field(Asset) total_lendable!: Asset
-    @Struct.field(Asset) total_rex!: Asset
+    @Struct.field(Asset) total_rex!: Asset;
     @Struct.field(Asset) namebid_proceeds!: Asset
     @Struct.field(UInt64) loan_num!: UInt64
 }

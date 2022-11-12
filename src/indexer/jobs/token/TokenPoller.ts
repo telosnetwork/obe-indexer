@@ -25,7 +25,7 @@ const POLL_INTERVAL = 2 * 60 * 1000
 const REX_POLL_INTERVAL = 12 * 60 * 60 * 1000
 
 export default class TokenPoller {
-    private tokens: Token[] = []
+    private tokens: Token[] = [];
     private indexer: Indexer
     private chainApi: ChainAPI
     private lastPollTime = 0
@@ -138,6 +138,7 @@ export default class TokenPoller {
         return statResponse.rows[0];
     }
 
+    // TODO: maybe this should be done daily?
     private async doFullTokenLoad(currentBlock: number, token: Token) {
         logger.info(`Starting full load of ${token.name}`)
         let more = true
