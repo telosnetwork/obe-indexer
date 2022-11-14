@@ -40,6 +40,9 @@ Install node v.16
 ```curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -```
 ```sudo apt-get install -y nodejs```
 
+Install jq  
+```sudo apt install jq```
+
 Install Postgresql  
 ```sudo apt install postgresql postgresql-contrib```
 
