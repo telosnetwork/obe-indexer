@@ -161,10 +161,6 @@ export default class TokenPoller {
 
         await this.updateTokenSupply(token, statRow);
 
-        await this.indexer.dbPool?.query(sql`UPDATE tokens
-                                             SET last_block = ${currentBlock}
-                                             WHERE id = ${token.id}`)
-
         while (more) {
             const response = await this.chainApi.get_table_by_scope({
                 code: token.account,
@@ -197,6 +193,10 @@ export default class TokenPoller {
         await this.indexer.dbPool?.query(sql`UPDATE balances
                                              SET liquid_balance = 0
                                              WHERE block != ${currentBlock} AND token = ${token.id}`)
+
+        await this.indexer.dbPool?.query(sql`UPDATE tokens
+                                             SET last_block = ${currentBlock}
+                                             WHERE id = ${token.id}`)
 
         logger.info(`Removed all balances not seen on this full load of ${token.name}`)
     }
