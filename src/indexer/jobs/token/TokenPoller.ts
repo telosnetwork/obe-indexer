@@ -21,6 +21,8 @@ const logger = createLogger('TokenPoller')
 // 2min for updating token balances
 const POLL_INTERVAL = 2 * 60 * 1000
 
+const TOKENLIST_INTERVAL = 2 * 60 * 60 * 1000
+
 // 12hrs for polling REX balances
 const REX_POLL_INTERVAL = 12 * 60 * 60 * 1000
 
@@ -29,6 +31,7 @@ export default class TokenPoller {
     private indexer: Indexer
     private chainApi: ChainAPI
     private lastPollTime = 0
+    private lastTokenlistTime = 0
     private lastRexTime = 0
     private currentLibBlock = 0
 
@@ -41,7 +44,6 @@ export default class TokenPoller {
         return this.loadTokenList()
     }
 
-    // TODO: this on some hourly interval
     async loadTokenList() {
         const {data, status} = await axios.get<TokenList>(
             this.indexer.config.tokenListUrl
@@ -53,12 +55,17 @@ export default class TokenPoller {
         }
         this.tokens = data.tokens
         this.tokens.forEach(
-            (token) => (token.id = `${token.account}:${token.symbol}`)
+            token => token.id = `${token.account.toLowerCase()}:${token.symbol.toUpperCase()}`
         )
+        this.lastTokenlistTime = new Date().getTime()
     }
 
     async run() {
-        const now = new Date();
+        let now = new Date();
+        if ((this.lastTokenlistTime + TOKENLIST_INTERVAL) < now.getTime()) {
+            await this.loadTokenList()
+        }
+
         if ((this.lastPollTime + POLL_INTERVAL) > now.getTime()) {
             return
         }

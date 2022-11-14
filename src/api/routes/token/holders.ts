@@ -58,7 +58,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         }
     }, async (request, reply) => {
         // TODO: Typecast the row results so we don't need to String(everything)
-        const id = `${request.params.contract}:${request.params.symbol}`
+        const id = `${request.params.contract.toLowerCase()}:${request.params.symbol.toUpperCase()}`
         const token = await fastify.dbPool.one(sql`SELECT * FROM tokens WHERE id = ${id}`)
         if (!token) {
             return reply.status(404).send({
