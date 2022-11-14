@@ -90,7 +90,7 @@ export default class Api {
                     url: 'https://docs.telos.net',
                     description: 'Find more info here'
                 },
-                host: this.config.apiHost,
+                baseURI: '',
                 schemes: ['https', 'http'],
                 tags: [
                     {name: 'chain', description: 'Chain statistics endpoints'},

@@ -21,7 +21,7 @@ export default class Indexer {
     public antelopeCore: APIClient;
     public hyperion: AxiosInstance;
     public dbPool: DatabasePool | undefined;
-    //private tokenPoller: TokenPoller;
+    private tokenPoller: TokenPoller;
     private voterPoller: VotePoller;
 
     private constructor(config: IndexerConfig) {
@@ -33,7 +33,7 @@ export default class Indexer {
         });
 
         // must happen last, jobs may use the above in constructors
-        //this.tokenPoller = new TokenPoller(this);
+        this.tokenPoller = new TokenPoller(this);
         this.voterPoller = new VotePoller(this);
     }
 
@@ -76,11 +76,11 @@ export default class Indexer {
     }
 
     private async initAll() {
-        //await this.tokenPoller.init();
+        await this.tokenPoller.init();
     }
 
     private async runAll() {
-        //await this.tokenPoller.run();
+        await this.tokenPoller.run();
         await this.voterPoller.run();
     }
 

@@ -111,7 +111,6 @@ export default class VotePoller {
             return;
         }
 
-        // TODO: set this properly once we have data
         this.lastBpTime = Number(snapshotResult.max)
     }
 
