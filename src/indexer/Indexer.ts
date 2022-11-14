@@ -7,7 +7,6 @@ import {
     createQueryLoggingInterceptor
 } from 'slonik-interceptor-query-logging';
 
-<<<<<<< Updated upstream
 import {makeRetryFetch, sleep} from "../util/utils";
 import {createLogger} from "../util/logger";
 import TokenPoller from "./jobs/token/TokenPoller";
@@ -15,9 +14,6 @@ import VotePoller from "./jobs/voting/VoterPoller";
 
 const RUN_LOOP_SLEEP = 1000;
 const logger = createLogger('Indexer')
-=======
-import { makeRetryFetch } from "../util/retryFetchMaker";
->>>>>>> Stashed changes
 
 export default class Indexer {
 

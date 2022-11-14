@@ -16,8 +16,4 @@ export interface RetryFetchOpts {
     attempts: number
     delay: number
     silent: boolean
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes
