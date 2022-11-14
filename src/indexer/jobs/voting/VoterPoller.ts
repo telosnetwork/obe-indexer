@@ -143,7 +143,7 @@ export default class VotePoller {
     }
 
     private async doVoterFullLoad() {
-        logger.info(`Starting full load of voters`)
+        logger.info(`Starting full load of voters...`)
 
         let count = 0
         const getInfo = await this.chainApi.get_info()
@@ -184,6 +184,7 @@ export default class VotePoller {
         }
 
         this.setLastVoterTimeFromBlock(currentLibBlock)
+        logger.info(`Done with full load of voters`)
     }
 
     private async doVoterIncremental() {
@@ -193,6 +194,7 @@ export default class VotePoller {
     }
 
     private async doBps() {
+        logger.info(`Doing BP snapshot...`)
         const producers: Producer[] = []
         try {
             await paginateTableQuery(this.indexer.antelopeCore, {
@@ -232,5 +234,6 @@ export default class VotePoller {
             producerMap[p.account.toString()] = p
         })
         await this.indexer.dbPool?.query(sql`INSERT INTO producer_snapshot (date, snapshot) VALUES (now(), ${JSON.stringify(producerMap)})`)
+        logger.info(`BP snapshot complete`)
     }
 }
