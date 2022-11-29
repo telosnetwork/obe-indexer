@@ -2,6 +2,7 @@ export interface IndexerConfig {
     apiAddress: string
     apiPort: number
     apiHost: string
+    apiProtocols: string[]
     tokenListUrl: string
     nodeosUrl: string
     hyperionUrl: string

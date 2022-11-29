@@ -76,6 +76,7 @@ export default class Api {
     }
 
     private async registerPlugins() {
+        await this.fastify.register(fastifyCors)
         this.fastify.register(fastifyTraps, {
             timeout: 3000
         })
@@ -90,8 +91,8 @@ export default class Api {
                     url: 'https://docs.telos.net',
                     description: 'Find more info here'
                 },
-                host: this.config.apiHost,
-                schemes: ['https', 'http'],
+                host: `${this.config.apiHost}`,
+                schemes: this.config.apiProtocols,
                 tags: [
                     {name: 'chain', description: 'Chain statistics endpoints'},
                     {name: 'tokens', description: 'Token stats endpoints'}
@@ -101,7 +102,6 @@ export default class Api {
         await this.fastify.register(fastifySwaggerUi, {
             routePrefix: `/v1/docs`
         })
-        await this.fastify.register(fastifyCors, {origin: true})
         await this.fastify.register(fastifyAutoLoad, { dir: path.join(__dirname, 'routes'), options: { prefix: `/v1` } });
 
     }

@@ -16,3 +16,13 @@ CREATE TABLE balances
     total_balance bigint,
     CONSTRAINT balances_pkey PRIMARY KEY (token, account)
 );
+
+CREATE TABLE delegations
+(
+    from_account varchar(12),
+    to_account   varchar(12),
+    net          bigint,
+    cpu          bigint,
+    block        bigint,
+    CONSTRAINT delegations_pkey PRIMARY KEY (from_account, to_account)
+);

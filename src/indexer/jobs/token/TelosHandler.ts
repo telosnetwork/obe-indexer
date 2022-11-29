@@ -36,6 +36,69 @@ export class RexPool extends Struct {
     @Struct.field(UInt64) loan_num!: UInt64
 }
 
+@Struct.type('delegated_bandwidth')
+export class DelegatedBandwidth extends Struct {
+    @Struct.field(Name) from!: Name
+    @Struct.field(Name) to!: Name
+    @Struct.field(Asset) net_weight!: Asset
+    @Struct.field(Asset) cpu_weight!: Asset
+}
+
+export const updateDelegated = async (token: Token, currentBlock: number, indexer: Indexer) => {
+    let more = true
+    let nextKey = ''
+    let count = 0
+    let delegators: Name[] = []
+
+    while (more) {
+        const response = await indexer.antelopeCore.v1.chain.get_table_by_scope({
+            code: 'eosio',
+            table: 'delband',
+            lower_bound: nextKey,
+            limit: 500,
+        })
+
+        if (response.more && response.more !== '') {
+            more = true
+            nextKey = response.more
+        } else {
+            more = false
+        }
+        count += response.rows.length
+        delegators = delegators.concat(
+            response.rows.map((r) => Name.from(r.scope))
+        )
+        logger.info(`Found ${count} scopes for delegated bandwith`)
+    }
+
+    logger.info(
+        `Loading rows for ${count} total delband scopes`
+    )
+
+    for (const delegator of delegators) {
+        await paginateTableQuery(indexer.antelopeCore, {
+            code: 'eosio',
+            scope: String(delegator),
+            table: 'delband',
+            type: DelegatedBandwidth
+        }, async (row: any) => {
+            const from = row.from.toString()
+            const to = row.to.toString()
+            const cpuBalance = String(row.cpu_weight.units)
+            const netBalance = String(row.net_weight.units)
+            await indexer.dbPool?.query(sql`INSERT INTO delegations (from_account, to_account, cpu, net, block)
+                                            VALUES (${from}, ${to}, ${cpuBalance}, ${netBalance}, ${currentBlock})
+                                            ON CONFLICT ON CONSTRAINT delegations_pkey
+                                                DO UPDATE
+                                                SET cpu   = EXCLUDED.cpu,
+                                                    net   = EXCLUDED.net,
+                                                    block = EXCLUDED.block
+            `)
+            if (++count % 50 === 0)
+                logger.info(`Processed ${count} delegations, current account: ${delegator}`)
+        })
+    }
+}
 
 export const updateRexBalances = async (token: Token, currentBlock: number, indexer: Indexer) => {
     const rexPoolResponse = await indexer.antelopeCore.v1.chain.get_table_rows({
@@ -76,6 +139,7 @@ export const updateRexBalances = async (token: Token, currentBlock: number, inde
                                         total_balance = COALESCE(balances.liquid_balance, 0) +
                                                         COALESCE(balances.rex_stake, 0) +
                                                         COALESCE(balances.resource_stake, 0)
-                                    WHERE block != ${currentBlock} AND token = ${token.id}
+                                    WHERE block != ${currentBlock}
+                                      AND token = ${token.id}
     `)
 }
