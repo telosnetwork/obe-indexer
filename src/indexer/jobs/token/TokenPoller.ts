@@ -230,6 +230,7 @@ export default class TokenPoller {
     private async loadHolder(currentBlock: number, token: Token, account: Name) {
         const response = await this.chainApi.get_table_rows({
             code: token.account,
+            // TOOD: once there's a better way to handle accounts like '1' besides adding the space as below, fix this and don't have the space
             scope: `${String(account)} `,
             table: 'accounts',
             type: AccountRow,

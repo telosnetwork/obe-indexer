@@ -83,8 +83,8 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
                 return {
                     from: String(row.from_account),
                     to: String(row.to_account),
-                    cpu: String(row.cpu),
-                    net: String(row.net)
+                    cpu: balanceToDecimals(String(row.cpu), 4),
+                    net: balanceToDecimals(String(row.net), 4)
                 }
             })
         }

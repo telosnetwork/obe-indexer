@@ -44,6 +44,14 @@ export class DelegatedBandwidth extends Struct {
     @Struct.field(Asset) cpu_weight!: Asset
 }
 
+const getStakedBalance = async (delegator: Name, indexer: Indexer) => {
+    const sumQuery = sql`SELECT SUM(net) + SUM(cpu) AS sum
+                         FROM delegations
+                         WHERE from_account = ${String(delegator)}`
+    const stakedSum = await indexer.dbPool?.one(sumQuery)
+    return stakedSum && stakedSum.sum ? stakedSum.sum as string : '0'
+}
+
 export const updateDelegated = async (token: Token, currentBlock: number, indexer: Indexer) => {
     let more = true
     let nextKey = ''
@@ -78,7 +86,8 @@ export const updateDelegated = async (token: Token, currentBlock: number, indexe
     for (const delegator of delegators) {
         await paginateTableQuery(indexer.antelopeCore, {
             code: 'eosio',
-            scope: String(delegator),
+            // TOOD: once there's a better way to handle accounts like '1' besides adding the space as below, fix this and don't have the space
+            scope: `${String(delegator)} `,
             table: 'delband',
             type: DelegatedBandwidth
         }, async (row: any) => {
@@ -97,6 +106,25 @@ export const updateDelegated = async (token: Token, currentBlock: number, indexe
             if (++count % 50 === 0)
                 logger.info(`Processed ${count} delegations, current account: ${delegator}`)
         })
+    }
+
+    await indexer.dbPool?.query(sql`DELETE FROM delegations
+                                    WHERE block != ${currentBlock}
+    `)
+
+    for (const delegator of delegators) {
+        const stakedSum = await getStakedBalance(delegator, indexer)
+        const query = sql`
+            INSERT INTO balances (block, token, account, resource_stake, total_balance, rex_stake, liquid_balance)
+            VALUES (${currentBlock}, ${token.id}, ${String(delegator)}, ${String(stakedSum)}, ${String(stakedSum)}, 0,
+                    0)
+            ON CONFLICT ON CONSTRAINT balances_pkey
+                DO UPDATE
+                SET resource_stake = EXCLUDED.resource_stake,
+                    total_balance  = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) +
+                                     COALESCE(EXCLUDED.resource_stake, 0),
+                    block          = EXCLUDED.block`
+        const updated = await indexer.dbPool?.query(query)
     }
 }
 
