@@ -235,6 +235,6 @@ export default class VotePoller {
         })
         await this.indexer.dbPool?.query(sql`INSERT INTO producer_snapshot (date, snapshot) VALUES (now(), ${JSON.stringify(producerMap)})`)
         logger.info(`BP snapshot complete`)
-        await this.setLastBpTime()
+        this.lastBpTime = new Date().getTime();
     }
 }
