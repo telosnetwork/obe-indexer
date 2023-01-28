@@ -4,7 +4,8 @@ import Indexer from '../../Indexer'
 import {sql} from 'slonik'
 import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
 import {createLogger} from "../../../util/logger";
-import {updateRexBalances} from "./TelosHandler";
+import {getTableLastBlock} from "../../../util/utils";
+import {loadDelegated, loadRexBalances, loadDelegatedIncremental, loadRexBalancesIncremental, getTokenBalanceLastBlock } from "./TelosHandler";
 
 @Struct.type('account')
 export class AccountRow extends Struct {
@@ -16,116 +17,145 @@ export class StatRow extends Struct {
     @Struct.field(Asset) supply!: Asset
 }
 
-const logger = createLogger('TokenPoller')
+const logger = createLogger('TokenPoller', 'indexer');
 
-// 2min for updating token balances
-const POLL_INTERVAL = 2 * 60 * 1000
-
-const TOKENLIST_INTERVAL = 2 * 60 * 60 * 1000
-
-// 12hrs for polling REX balances
-const REX_POLL_INTERVAL = 12 * 60 * 60 * 1000
+export const POLLER_ID = 'token';
 
 export default class TokenPoller {
     private tokens: Token[] = [];
-    private indexer: Indexer
-    private chainApi: ChainAPI
-    private lastPollTime = 0
-    private lastTokenlistTime = 0
-    private lastRexTime = 0
-    private currentLibBlock = 0
+    private indexer: Indexer;
+    private chainApi: ChainAPI;
+    private currentLibBlock = 0;
+    private lastPollTime = 0;
+    private lastTokenlistTime = 0;
+    private lastRexTime = 0;
 
     constructor(indexer: Indexer) {
-        this.indexer = indexer
-        this.chainApi = this.indexer.antelopeCore.v1.chain
+        this.indexer = indexer;
+        this.chainApi = this.indexer.antelopeCore.v1.chain;
     }
 
     async init() {
-        return this.loadTokenList()
+        return await this.loadTokenList();
     }
 
     async loadTokenList() {
         const {data, status} = await axios.get<TokenList>(
             this.indexer.config.tokenListUrl
-        )
+        );
         if (status !== 200) {
             throw new Error(
                 `Failed to fetch tokenlist from ${this.indexer.config.tokenListUrl}`
-            )
+            );
         }
-        this.tokens = data.tokens
+        this.tokens = data.tokens;
         this.tokens.forEach(
             token => token.id = `${token.account.toLowerCase()}:${token.symbol.toUpperCase()}`
         )
-        this.lastTokenlistTime = new Date().getTime()
+        this.lastTokenlistTime = new Date().getTime();
     }
 
     async run() {
+
         let now = new Date();
-        if ((this.lastTokenlistTime + TOKENLIST_INTERVAL) < now.getTime()) {
-            await this.loadTokenList()
+        if ((this.lastTokenlistTime + (this.indexer.config.tokenListInterval * 60 * 1000)) < now.getTime()) {
+            await this.loadTokenList();
         }
 
-        if ((this.lastPollTime + POLL_INTERVAL) > now.getTime()) {
-            return
+        if ((this.lastPollTime + (this.indexer.config.tokenPollInterval * 60 * 1000)) > now.getTime()) {
+            return;
         }
         this.lastPollTime = now.getTime()
         logger.info(`Starting do tokens..`)
         for (const token of this.tokens) {
             try {
-                await this.doToken(token)
+                await this.doToken(token);
                 // TODO: Some cleaup action that finds any balances with zero values for all of liquid/rex/resources and deletes them
             } catch (e) {
-                logger.error(`Failure in doToken for ${token.name}: ${e}`)
+                logger.error(`Failure in doToken for ${token.name}: ${e}`);
             }
         }
-        logger.info(`Do tokens complete!!`)
+        logger.info(`Do tokens complete!!`);
     }
 
     private async doToken(token: Token) {
-        logger.info(`Start of ${token.name}`)
-        const lastBlock = await this.getLastBlock(token)
-        await this.setLib()
-        const currentLib = this.currentLibBlock
-
-        if (lastBlock == 0) {
-            await this.doFullTokenLoad(currentLib, token)
+        logger.info(`Start of ${token.name} (${token.symbol})`);
+        const lastBlock = await this.getTokenLastBlock(token);
+        const currentLib = await this.setLib();
+        if (lastBlock === 0) {
+            await this.doFullTokenLoad(currentLib, token);
         } else {
-            await this.pollTransfersSince(lastBlock, token)
+            await this.doTokenIncremental(lastBlock, token);
         }
-        if (token.id == `eosio.token:TLOS`) {
-            await this.doStakeBalances(token)
+        if (token.id === 'eosio.token:TLOS') {
+            await this.doStakeBalances(token);
         }
-        logger.info(`End of ${token.name}`)
+        logger.info(`End of ${token.name} (${token.symbol})`);
     }
 
     private async doStakeBalances(token: Token) {
-        const now = new Date().getTime()
-        if ((this.lastRexTime + REX_POLL_INTERVAL) > now) {
-            return;
+        logger.info(`Start of ${token.name} rex / delegated`);
+        const now = new Date().getTime();
+        const rexPollInterval = this.indexer.config.rexPollInterval * 60 * 1000;
+
+        // Delegation
+        const lastDelegationTableBlock: number = await getTableLastBlock('delegations', this.indexer);
+        let lastDelegationTime = 0;
+        if(lastDelegationTableBlock > 0) {
+            const responseDelegation = await this.chainApi.get_block(lastDelegationTableBlock);
+            lastDelegationTime = responseDelegation.timestamp.toMilliseconds();
+            if ((lastDelegationTime + rexPollInterval) < now) {
+                logger.info(`Doing incremental REX delegations for ${token.name} (${token.symbol})...`);
+                await loadDelegatedIncremental(token, this.currentLibBlock, lastDelegationTableBlock, POLLER_ID, this.indexer, this.chainApi);
+            } else {
+                logger.info(`Delegation polling is still in timeout`);
+            }
+        } else {
+            logger.info(`Doing full REX delegations for ${token.name} (${token.symbol})...`);
+            await loadDelegated(token, this.currentLibBlock, this.indexer);
         }
 
-        this.lastRexTime = now
-        logger.info(`Doing stake balances for ${token.id}`)
-        await updateRexBalances(token, this.currentLibBlock, this.indexer)
-        logger.info(`Done doing stake balances for TLOS`)
+        // Rex balances
+        const lastRexBalancesBlock: number = await getTokenBalanceLastBlock(token, this.indexer);
+        let lastRexBalancesTime = 0;
+        if(lastRexBalancesBlock > 0){
+            const rexBalancesResponse = await this.chainApi.get_block(lastRexBalancesBlock);
+            lastRexBalancesTime = rexBalancesResponse.timestamp.toMilliseconds();
+            if ((lastRexBalancesTime + rexPollInterval) < now) {
+                logger.info(`Doing incremental REX balances`);
+                await loadRexBalancesIncremental(token, this.currentLibBlock, lastRexBalancesBlock, POLLER_ID, this.indexer, this.chainApi);
+            }
+        } else {
+            logger.info(`Doing full REX balances`);
+            await loadRexBalances(token, this.currentLibBlock, this.indexer);
+        }
     }
-
-    private async getLastBlock(token: Token): Promise<number> {
-        const tokenRow = await this.indexer.dbPool?.maybeOne(
-            sql`SELECT last_block
+    private async getTokenLastBlock(token: Token): Promise<number> {
+        try {
+            const tokenRow = await this.indexer.dbPool?.maybeOne(
+                sql`SELECT last_block
                 from tokens
                 where id = ${token.id}`
-        )
-        if (tokenRow) {
-            return tokenRow.last_block as number
+            );
+            if (tokenRow) {
+                logger.info(`Last block found for ${token.name} (${token.symbol}) : ${tokenRow.last_block }`);
+                return tokenRow.last_block as number;
+            }
+        } catch (e) {
+            logger.error(`Could not retreive last block on token table for ${token.name} (${token.symbol}) : ${e}`);
         }
 
-        await this.indexer.dbPool?.query(
-            sql`INSERT INTO tokens (id, last_block)
-                VALUES (${token.id}, 0)`
-        )
-        return 0
+        try {
+            await this.indexer.dbPool?.query(
+                sql`INSERT INTO tokens (id, last_block)
+                    VALUES (${token.id}, 0)`
+            );
+            logger.info(`No last block found for ${token.name} (${token.symbol}), has been set to 0`);
+            return 0;
+        } catch (e) {
+            logger.error(`Could not set last block to 0 on token table for ${token.name} (${token.symbol}) : ${e}`);
+            return 0;
+        }
     }
 
     private async getStatRow(token: Token): Promise<StatRow | undefined> {
@@ -138,26 +168,25 @@ export default class TokenPoller {
         });
 
         if (!statResponse || statResponse.rows.length !== 1) {
-            logger.error(`Unable to find stat row for token: ${token.id}`)
-            return
+            logger.error(`Unable to find stat row for token: ${token.name} (${token.symbol})`);
+            return;
         }
 
         return statResponse.rows[0];
     }
 
-    // TODO: maybe this should be done daily?
     private async doFullTokenLoad(currentBlock: number, token: Token) {
-        logger.info(`Starting full load of ${token.name}`)
-        let more = true
-        let nextKey = ''
-        let count = 0
-        let holders: Name[] = []
+        logger.info(`Starting full load of ${token.name} (${token.symbol})...`);
+        let more = true;
+        let nextKey = '';
+        let count = 0;
+        let holders: Name[] = [];
 
-        const statRow: StatRow | undefined = await this.getStatRow(token)
+        const statRow: StatRow | undefined = await this.getStatRow(token);
         if (!statRow) {
-            logger.error(`Cannot do full token load, unable to find stat row for ${token.id}`)
-            return
-        }
+            logger.error(`Cannot do full token load, unable to find stat row for ${token.name} (${token.symbol})`);
+            return;
+        };
 
         await this.updateTokenSupply(token, statRow);
 
@@ -167,81 +196,89 @@ export default class TokenPoller {
                 table: 'accounts',
                 lower_bound: nextKey,
                 limit: 500,
-            })
+            });
 
             if (response.more && response.more !== '') {
-                more = true
-                nextKey = response.more
+                more = true;
+                nextKey = response.more;
             } else {
-                more = false
+                more = false;
             }
-            count += response.rows.length
+            count += response.rows.length;
             holders = holders.concat(
                 response.rows.map((r) => Name.from(r.scope))
-            )
-            logger.info(`Found ${count} holders for ${token.name}`)
+            );
+            logger.info(`Found ${count} holders for ${token.name} (${token.symbol})`);
         }
 
         logger.info(
-            `Loading balances for ${count} total holders of ${token.name}`
-        )
+            `Loading balances for ${count} total holders of ${token.name} (${token.symbol})`
+        );
 
-        await this.loadHolders(currentBlock, token, holders)
+        await this.loadHolders(currentBlock, token, holders);
 
-        logger.info(`${token.name} all ${count} completed`)
+        logger.info(`${token.name} (${token.symbol}) all ${count} completed`);
 
-        await this.indexer.dbPool?.query(sql`UPDATE balances
-                                             SET liquid_balance = 0
-                                             WHERE block != ${currentBlock} AND token = ${token.id}`)
+        try {
+            await this.indexer.dbPool?.query(sql`UPDATE balances SET liquid_balance = 0 WHERE block != ${currentBlock} AND token = ${token.id}`);
+            logger.info(`Removed all balances not seen on this full load of ${token.name} (${token.symbol})`);
+        } catch (e) {
+            logger.error(`Could not remove old balances for ${token.name} (${token.symbol}): ${e}`);
+        }
 
-        await this.indexer.dbPool?.query(sql`UPDATE tokens
-                                             SET last_block = ${currentBlock}
-                                             WHERE id = ${token.id}`)
 
-        logger.info(`Removed all balances not seen on this full load of ${token.name}`)
+        try {
+            await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${currentBlock} WHERE id = ${token.id}`);
+            logger.info(`Saved last block for ${token.name} (${token.symbol}): ${currentBlock}`);
+        } catch (e) {
+            logger.error(`Could not update last block for ${token.name} (${token.symbol}): ${e}`);
+        }
+
     }
 
     private async loadHolders(currentBlock: number, token: Token, holders: Name[] | Set<Name>) {
-        let holderPromiseBatch = []
-        const batchSize = 10
-        let loadedCount = 0
+        let holderPromiseBatch = [];
+        const batchSize = 10;
+        let loadedCount = 0;
+        logger.info(`Loading holders for ${token.name} (${token.symbol})...`);
         for (const holder of holders) {
-            holderPromiseBatch.push(this.loadHolder(currentBlock, token, holder))
+            holderPromiseBatch.push(this.loadHolder(currentBlock, token, holder));
 
             if (holderPromiseBatch.length >= batchSize) {
-                loadedCount += holderPromiseBatch.length
-                await Promise.all(holderPromiseBatch)
-                holderPromiseBatch = []
-                logger.info(`Loaded ${loadedCount} $${token.name} accounts...`)
+                loadedCount += holderPromiseBatch.length;
+                await Promise.all(holderPromiseBatch);
+                holderPromiseBatch = [];
+                logger.info(`Loaded ${loadedCount} ${token.name} (${token.symbol}) accounts...`);
             }
         }
 
         if (holderPromiseBatch.length >= 1) {
-            loadedCount += holderPromiseBatch.length
-            await Promise.all(holderPromiseBatch)
-            logger.info(`Loaded ${loadedCount} ${token.name} accounts...`)
+            loadedCount += holderPromiseBatch.length;
+            await Promise.all(holderPromiseBatch);
+            logger.info(`Loaded ${loadedCount} ${token.name} (${token.symbol}) accounts...`);
         }
     }
 
     private async loadHolder(currentBlock: number, token: Token, account: Name) {
         const response = await this.chainApi.get_table_rows({
             code: token.account,
+            // TOOD: once there's a better way to handle accounts like '1' besides adding the space as below, fix this and don't have the space
             scope: `${String(account)} `,
             table: 'accounts',
             type: AccountRow,
             limit: 200,
-        })
+        });
 
         if (!response || response.rows.length === 0) {
             logger.error(
                 `Unable to find balance for ${account.toString()} in ${
                     token.account
                 } with symbol ${token.symbol}`
-            )
+            );
         } else {
             for (const row of response.rows) {
-                const balance = String(row.balance.units)
-                const accountStr = account.toString()
+                const balance = String(row.balance.units);
+                const accountStr = account.toString();
                 const query = sql`
                     INSERT INTO balances (block, token, account, liquid_balance, total_balance, rex_stake, resource_stake)
                     VALUES (${currentBlock}, ${token.id}, ${accountStr}, ${balance}, ${balance}, 0, 0)
@@ -249,23 +286,24 @@ export default class TokenPoller {
                         DO UPDATE
                         SET liquid_balance = EXCLUDED.liquid_balance,
                             total_balance = COALESCE(EXCLUDED.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) + COALESCE(balances.resource_stake, 0),
-                            block   = EXCLUDED.block`
-                await this.indexer.dbPool?.query(query)
+                            block   = EXCLUDED.block`;
+                await this.indexer.dbPool?.query(query);
             }
         }
     }
 
-    private async pollTransfersSince(lastBlock: number, token: Token) {
-        const startBlockResponse = await this.chainApi.get_block(lastBlock)
+    private async doTokenIncremental(lastBlock: number, token: Token) {
+        logger.info(`Starting incremental load of ${token.name} (${token.symbol})...`);
+        const startBlockResponse = await this.chainApi.get_block(lastBlock);
         const startISO = new Date(startBlockResponse.timestamp.toMilliseconds()).toISOString();
-        const endBlockResponse = await this.chainApi.get_block(this.currentLibBlock)
+        const endBlockResponse = await this.chainApi.get_block(this.currentLibBlock);
         const endBlock = endBlockResponse.block_num.toNumber();
         const endISO = new Date(endBlockResponse.timestamp.toMilliseconds()).toISOString();
 
-        const statRow: StatRow | undefined = await this.getStatRow(token)
+        const statRow: StatRow | undefined = await this.getStatRow(token);
         if (!statRow) {
-            logger.error(`Cannot do incremental updates, unable to find stat row for ${token.id}`)
-            return
+            logger.error(`Cannot do incremental updates, unable to find stat row for ${token.id}`);
+            return;
         }
 
         await this.updateTokenSupply(token, statRow);
@@ -274,50 +312,53 @@ export default class TokenPoller {
             after: startISO,
             before: endISO,
             code: token.account,
-            table: 'accounts'
-        }
-        // TODO: paginate here
-        const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, {params})
-        if (response.data.total.value == 0) {
-            logger.info(`${token.name} had no transfers between ${startISO} and ${endISO}`)
-            const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens
-                                                                      SET last_block = ${endBlock}
-                                                                      WHERE id = ${token.id}`)
-            return;
-        }
-
-        const holders = new Set<Name>()
-        for (const delta of response.data.deltas) {
-            if (delta.data.symbol !== token.symbol) {
-                // This is not an error, a contract can store many different symbols
-                continue
+            table: 'accounts',
+            sort: 'asc',
+            limit: this.indexer.config.hyperionIncrementLimit
+        };
+        try {
+            const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, {params});
+            if (response.data.total.value == 0) {
+                logger.info(`${token.name} (${token.symbol}) had no transfers between ${startISO} and ${endISO}`);
+                return await this.updateTokenLastBlock(token, endBlock);
             }
 
-            if (delta.code !== token.account) {
-                logger.error(`Got a delta with incorrect code, expected ${token.account} but got ${delta.code}`)
-                continue
+            const holders = new Set<Name>();
+            for (const delta of response.data.deltas) {
+                if (delta.data.symbol !== token.symbol) {
+                    // This is not an error, a contract can store many different symbols
+                    continue;
+                }
+
+                if (delta.code !== token.account) {
+                    logger.error(`Got a delta with incorrect code, expected ${token.account} but got ${delta.code}`);
+                    continue;
+                }
+
+                holders.add(delta.scope);
             }
 
-            holders.add(delta.scope)
+            logger.info(`Found ${holders.size} account balances changed for ${token.name} (${token.symbol}) between ${startISO}-${endISO}`);
+            await this.loadHolders(endBlock, token, holders);
+        } catch (e) {
+            throw `Could not get accounts table deltas from hyperion for token ${token.name} (${token.account}), make sure the configured node is available: ${e}`;
+            // This can happen if node is 404... Throw it so someone can restart the app & look at it, else the data is going to be false and we will not be able to catch it short of a full reload.
         }
 
-        logger.info(`Found ${holders.size} account balances changed for ${token.name} between ${startISO}-${endISO}`)
-        await this.loadHolders(endBlock, token, holders);
-
-        const updateResult = await this.indexer.dbPool?.query(sql`UPDATE tokens
-                                                                  SET last_block = ${endBlock}
-                                                                  WHERE id = ${token.id}`)
+        return await this.updateTokenLastBlock(token, endBlock);
     }
 
     private async setLib() {
         // TODO: maybe here we should look at how long ago this was and skip it if it's say... less than 5 seconds old
-        const getInfo = await this.chainApi.get_info()
-        this.currentLibBlock = getInfo.last_irreversible_block_num.toNumber()
+        const getInfo = await this.chainApi.get_info();
+        this.currentLibBlock = getInfo.last_irreversible_block_num.toNumber();
+        return this.currentLibBlock;
     }
 
+    private async updateTokenLastBlock(token: Token, block: number) {
+        return await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${block}  WHERE id = ${token.id}`);
+    }
     private async updateTokenSupply(token: Token, statRow: StatRow) {
-        await this.indexer.dbPool?.query(sql`UPDATE tokens
-                                             SET supply = ${statRow.supply.toString()}
-                                             WHERE id = ${token.id}`)
+        return await this.indexer.dbPool?.query(sql`UPDATE tokens SET supply = ${statRow.supply.toString()} WHERE id = ${token.id}`);
     }
 }

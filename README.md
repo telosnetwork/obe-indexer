@@ -72,6 +72,9 @@ Copy example.config.json to config.json and edit it for your DB, Hyp and Nodeos 
 Install Yarn  
 ```sudo npm install --global yarn```
 
+Install Dependencies  
+```yarn ```
+
 Buld the Indexer  
 ```yarn run build```
 
