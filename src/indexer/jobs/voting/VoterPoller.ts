@@ -350,5 +350,6 @@ export default class VoterPoller {
             logger.error(`Error inserting into producer_snapshot table: ${e}`)
         }
         logger.info(`BP snapshot complete`)
+        this.lastBpTime = new Date().getTime();
     }
 }

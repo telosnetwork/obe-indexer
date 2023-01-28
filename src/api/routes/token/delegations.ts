@@ -13,6 +13,7 @@ const delegationsQueryString = Type.Object({
         examples: ['delegateeee'],
         description: 'Account name for the account that has received the staked resources'
     })),
+<<<<<<< HEAD
     limit: Type.Optional(Type.Number({
         examples: [500],
         description: 'Maximum number of results to retreive (max: 500)',
@@ -24,6 +25,8 @@ const delegationsQueryString = Type.Object({
         description: 'Offsets results for pagination (skips first X)',
         default: 0
     }))
+=======
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
 })
 
 type DelegationsQueryString = Static<typeof delegationsQueryString>
@@ -66,10 +69,15 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             }
         }
     }, async (request, reply) => {
+<<<<<<< HEAD
         const from = request.query.from;
         const to = request.query.to;
         const limit = request.query.limit || 100;
         const offset = request.query.offset || 0;
+=======
+        const from = request.query.from
+        const to = request.query.to
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
         if (!from && !to) {
             reply.status(404).send({
                 message: `Missing to or from`,
@@ -90,7 +98,11 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
 
         const delegationsResult = await fastify.dbPool.query(sql`SELECT *
                                                                  FROM delegations
+<<<<<<< HEAD
                                                                  WHERE ${sql.join(components, sql` AND `)} LIMIT ${limit} OFFSET ${offset}`)
+=======
+                                                                 WHERE ${sql.join(components, sql` AND `)}`)
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
         const delegationsResponse: DelegationsResponse = {
             delegations: delegationsResult.rows.map((row): DelegationRow => {
                 return {

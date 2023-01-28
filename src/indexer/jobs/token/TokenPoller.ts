@@ -4,8 +4,12 @@ import Indexer from '../../Indexer'
 import {sql} from 'slonik'
 import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
 import {createLogger} from "../../../util/logger";
+<<<<<<< HEAD
 import {getTableLastBlock} from "../../../util/utils";
 import {loadDelegated, loadRexBalances, loadDelegatedIncremental, loadRexBalancesIncremental, getTokenBalanceLastBlock } from "./TelosHandler";
+=======
+import {updateDelegated, updateRexBalances} from "./TelosHandler";
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
 
 @Struct.type('account')
 export class AccountRow extends Struct {
@@ -94,6 +98,7 @@ export default class TokenPoller {
     }
 
     private async doStakeBalances(token: Token) {
+<<<<<<< HEAD
         logger.info(`Start of ${token.name} rex / delegated`);
         const now = new Date().getTime();
         const rexPollInterval = this.indexer.config.rexPollInterval * 60 * 1000;
@@ -129,6 +134,21 @@ export default class TokenPoller {
             logger.info(`Doing full REX balances`);
             await loadRexBalances(token, this.currentLibBlock, this.indexer);
         }
+=======
+        // TODO: add incremental updates for both rex and delegated
+        const now = new Date().getTime()
+        if ((this.lastRexTime + REX_POLL_INTERVAL) > now) {
+            return;
+        }
+
+        this.lastRexTime = now
+        logger.info(`Doing stake balances for ${token.id}`)
+        logger.info(`Doing rex first...`)
+        await updateRexBalances(token, this.currentLibBlock, this.indexer)
+        logger.info(`Rex done, doing delegated...`)
+        await updateDelegated(token, this.currentLibBlock, this.indexer)
+        logger.info(`Done doing stake balances for TLOS`)
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
     }
     private async getTokenLastBlock(token: Token): Promise<number> {
         try {

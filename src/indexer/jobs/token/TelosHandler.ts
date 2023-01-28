@@ -44,6 +44,93 @@ export class DelegatedBandwidth extends Struct {
     @Struct.field(Asset) net_weight!: Asset
     @Struct.field(Asset) cpu_weight!: Asset
 }
+<<<<<<< HEAD
+=======
+
+const getStakedBalance = async (delegator: Name, indexer: Indexer) => {
+    const sumQuery = sql`SELECT SUM(net) + SUM(cpu) AS sum
+                         FROM delegations
+                         WHERE from_account = ${String(delegator)}`
+    const stakedSum = await indexer.dbPool?.one(sumQuery)
+    return stakedSum && stakedSum.sum ? stakedSum.sum as string : '0'
+}
+
+export const updateDelegated = async (token: Token, currentBlock: number, indexer: Indexer) => {
+    let more = true
+    let nextKey = ''
+    let count = 0
+    let delegators: Name[] = []
+
+    while (more) {
+        const response = await indexer.antelopeCore.v1.chain.get_table_by_scope({
+            code: 'eosio',
+            table: 'delband',
+            lower_bound: nextKey,
+            limit: 500,
+        })
+
+        if (response.more && response.more !== '') {
+            more = true
+            nextKey = response.more
+        } else {
+            more = false
+        }
+        count += response.rows.length
+        delegators = delegators.concat(
+            response.rows.map((r) => Name.from(r.scope))
+        )
+        logger.info(`Found ${count} scopes for delegated bandwith`)
+    }
+
+    logger.info(
+        `Loading rows for ${count} total delband scopes`
+    )
+
+    for (const delegator of delegators) {
+        await paginateTableQuery(indexer.antelopeCore, {
+            code: 'eosio',
+            // TOOD: once there's a better way to handle accounts like '1' besides adding the space as below, fix this and don't have the space
+            scope: `${String(delegator)} `,
+            table: 'delband',
+            type: DelegatedBandwidth
+        }, async (row: any) => {
+            const from = row.from.toString()
+            const to = row.to.toString()
+            const cpuBalance = String(row.cpu_weight.units)
+            const netBalance = String(row.net_weight.units)
+            await indexer.dbPool?.query(sql`INSERT INTO delegations (from_account, to_account, cpu, net, block)
+                                            VALUES (${from}, ${to}, ${cpuBalance}, ${netBalance}, ${currentBlock})
+                                            ON CONFLICT ON CONSTRAINT delegations_pkey
+                                                DO UPDATE
+                                                SET cpu   = EXCLUDED.cpu,
+                                                    net   = EXCLUDED.net,
+                                                    block = EXCLUDED.block
+            `)
+            if (++count % 50 === 0)
+                logger.info(`Processed ${count} delegations, current account: ${delegator}`)
+        })
+    }
+
+    await indexer.dbPool?.query(sql`DELETE FROM delegations
+                                    WHERE block != ${currentBlock}
+    `)
+
+    for (const delegator of delegators) {
+        const stakedSum = await getStakedBalance(delegator, indexer)
+        const query = sql`
+            INSERT INTO balances (block, token, account, resource_stake, total_balance, rex_stake, liquid_balance)
+            VALUES (${currentBlock}, ${token.id}, ${String(delegator)}, ${String(stakedSum)}, ${String(stakedSum)}, 0,
+                    0)
+            ON CONFLICT ON CONSTRAINT balances_pkey
+                DO UPDATE
+                SET resource_stake = EXCLUDED.resource_stake,
+                    total_balance  = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) +
+                                     COALESCE(EXCLUDED.resource_stake, 0),
+                    block          = EXCLUDED.block`
+        const updated = await indexer.dbPool?.query(query)
+    }
+}
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
 
 /*
  * UTILS
@@ -344,8 +431,24 @@ export const insertRexBalance = async (row: any, rexPrice: string | bigDecimal, 
                     total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(EXCLUDED.rex_stake, 0) +
                                     COALESCE(balances.resource_stake, 0),
                     block         = EXCLUDED.block`
+<<<<<<< HEAD
         return await indexer.dbPool?.query(query)
     } catch (e) {
         logger.error(`Could not insert or update rex balance for ${account} : ${e}`)
     }
+=======
+        const updated = await indexer.dbPool?.query(query)
+        if (++count % 50 === 0)
+            logger.info(`Processed ${count} rex balances, current account: ${account}`)
+    })
+
+    await indexer.dbPool?.query(sql`UPDATE balances
+                                    SET rex_stake     = 0,
+                                        total_balance = COALESCE(balances.liquid_balance, 0) +
+                                                        COALESCE(balances.rex_stake, 0) +
+                                                        COALESCE(balances.resource_stake, 0)
+                                    WHERE block != ${currentBlock}
+                                      AND token = ${token.id}
+    `)
+>>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
 }
