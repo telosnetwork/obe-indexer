@@ -44,8 +44,6 @@ export class DelegatedBandwidth extends Struct {
     @Struct.field(Asset) net_weight!: Asset
     @Struct.field(Asset) cpu_weight!: Asset
 }
-<<<<<<< HEAD
-=======
 
 const getStakedBalance = async (delegator: Name, indexer: Indexer) => {
     const sumQuery = sql`SELECT SUM(net) + SUM(cpu) AS sum
@@ -130,7 +128,6 @@ export const updateDelegated = async (token: Token, currentBlock: number, indexe
         const updated = await indexer.dbPool?.query(query)
     }
 }
->>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
 
 /*
  * UTILS
@@ -431,24 +428,8 @@ export const insertRexBalance = async (row: any, rexPrice: string | bigDecimal, 
                     total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(EXCLUDED.rex_stake, 0) +
                                     COALESCE(balances.resource_stake, 0),
                     block         = EXCLUDED.block`
-<<<<<<< HEAD
         return await indexer.dbPool?.query(query)
     } catch (e) {
         logger.error(`Could not insert or update rex balance for ${account} : ${e}`)
     }
-=======
-        const updated = await indexer.dbPool?.query(query)
-        if (++count % 50 === 0)
-            logger.info(`Processed ${count} rex balances, current account: ${account}`)
-    })
-
-    await indexer.dbPool?.query(sql`UPDATE balances
-                                    SET rex_stake     = 0,
-                                        total_balance = COALESCE(balances.liquid_balance, 0) +
-                                                        COALESCE(balances.rex_stake, 0) +
-                                                        COALESCE(balances.resource_stake, 0)
-                                    WHERE block != ${currentBlock}
-                                      AND token = ${token.id}
-    `)
->>>>>>> 020ee3de6395319d2eb70332bcd90e7268675fd2
 }
