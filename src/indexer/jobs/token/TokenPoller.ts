@@ -4,8 +4,8 @@ import Indexer from '../../Indexer'
 import {sql} from 'slonik'
 import {Asset, ChainAPI, Name, Struct} from '@greymass/eosio'
 import {createLogger} from "../../../util/logger";
-import {getTableLastBlock} from "../../../util/utils";
-import {loadDelegated, loadRexBalances, loadDelegatedIncremental, loadRexBalancesIncremental, getTokenBalanceLastBlock } from "./TelosHandler";
+import {getTableLastBlock, getLastActionsBlock, setLastActionBlock} from "../../../util/utils";
+import {loadDelegated, loadRexBalances, loadDelegatedIncremental, loadRexBalancesIncremental} from "./TelosHandler";
 
 @Struct.type('account')
 export class AccountRow extends Struct {
@@ -116,11 +116,10 @@ export default class TokenPoller {
         }
 
         // Rex balances
-        const lastRexBalancesBlock: number = await getTokenBalanceLastBlock(token, this.indexer);
-        let lastRexBalancesTime = 0;
+        const lastRexBalancesBlock: number = await getLastActionsBlock(['eosio:buyrex', 'eosio:sellrex'], POLLER_ID, this.indexer);
         if(lastRexBalancesBlock > 0){
             const rexBalancesResponse = await this.chainApi.get_block(lastRexBalancesBlock);
-            lastRexBalancesTime = rexBalancesResponse.timestamp.toMilliseconds();
+            const lastRexBalancesTime = rexBalancesResponse.timestamp.toMilliseconds();
             if ((lastRexBalancesTime + rexPollInterval) < now) {
                 logger.info(`Doing incremental REX balances`);
                 await loadRexBalancesIncremental(token, this.currentLibBlock, lastRexBalancesBlock, POLLER_ID, this.indexer, this.chainApi);
@@ -128,6 +127,7 @@ export default class TokenPoller {
         } else {
             logger.info(`Doing full REX balances`);
             await loadRexBalances(token, this.currentLibBlock, this.indexer);
+            await setLastActionBlock('eosio:buyrex', POLLER_ID, this.currentLibBlock, this.indexer);
         }
     }
     private async getTokenLastBlock(token: Token): Promise<number> {
@@ -157,7 +157,6 @@ export default class TokenPoller {
             return 0;
         }
     }
-
     private async getStatRow(token: Token): Promise<StatRow | undefined> {
         const statResponse = await this.indexer.antelopeCore.v1.chain.get_table_rows({
             code: token.account,
@@ -286,7 +285,9 @@ export default class TokenPoller {
                         DO UPDATE
                         SET liquid_balance = EXCLUDED.liquid_balance,
                             total_balance = COALESCE(EXCLUDED.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) + COALESCE(balances.resource_stake, 0),
-                            block   = EXCLUDED.block`;
+                            block   = EXCLUDED.block
+                        WHERE balances.token = ${token.id} AND balances.account = ${accountStr}
+                `;
                 await this.indexer.dbPool?.query(query);
             }
         }
@@ -356,9 +357,20 @@ export default class TokenPoller {
     }
 
     private async updateTokenLastBlock(token: Token, block: number) {
-        return await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${block}  WHERE id = ${token.id}`);
+        try {
+            return await this.indexer.dbPool?.query(sql`UPDATE tokens SET last_block = ${block}  WHERE id = ${token.id}`);
+        } catch (e) {
+            logger.error(`Could not update token ${token.name} (${token.symbol}) last block to ${block} : ${e}`);
+        }
+        return false;
     }
     private async updateTokenSupply(token: Token, statRow: StatRow) {
-        return await this.indexer.dbPool?.query(sql`UPDATE tokens SET supply = ${statRow.supply.toString()} WHERE id = ${token.id}`);
+        const supply = statRow.supply.toString();
+        try {
+            return await this.indexer.dbPool?.query(sql`UPDATE tokens SET supply = ${supply} WHERE id = ${token.id}`);
+        } catch (e) {
+            logger.error(`Could not update token ${token.name} (${token.symbol}) supply to ${supply} : ${e}`);
+        }
+        return false;
     }
 }

@@ -66,6 +66,17 @@ export const getLastActionBlockISO= async (action: string, poller: string, index
     const response = await chainAPI.get_block(block);
     return new Date(response.timestamp.toMilliseconds()).toISOString();
 }
+export const getLastActionsBlock = async (actions: Array<string>, poller: string, indexer: Indexer) => {
+    try {
+        const row = await indexer.dbPool?.maybeOne(sql`SELECT MAX(block) as block FROM sync_status WHERE action = ANY(${sql.array(actions, 'text')}) AND poller = ${poller}`);
+        if(!row) return 0; // Nothing found
+        logger.info(`Last block found for ${actions.length} action(s) of the ${poller} poller : ${row.block}`)
+        return row.block as number || 0;
+    } catch (e) {
+        logger.error(`Could not retreive last block for ${actions.length} action(s) of the ${poller} poller : ${e}`)
+        return 0;
+    }
+}
 export const getLastActionBlock = async (action: string, poller: string, indexer: Indexer) => {
     try {
         const row = await indexer.dbPool?.maybeOne(sql`SELECT block FROM sync_status WHERE action = ${action} AND poller = ${poller}`);
@@ -73,7 +84,7 @@ export const getLastActionBlock = async (action: string, poller: string, indexer
         logger.info(`Last block found for the ${action} action of the ${poller} poller : ${row.block}`)
         return row.block as number;
     } catch (e) {
-        logger.error(`Could not retreive last block for action ${action} for the ${poller} poller : ${e}`)
+        logger.error(`Could not retreive last block for action ${action} of the ${poller} poller : ${e}`)
         return 0;
     }
 }
@@ -90,14 +101,13 @@ export  async function getActions(indexer: Indexer, poller: string, params: any,
             try {
                 await callback(action);
                 if(lastBlock){
-                    await setLastActionBlock(params.filter, poller, action.block, indexer);
+                    lastBlock = action.block;
                 }
             } catch (e) {
                 logger.error(`Failure doing ${params.filter} action callback for ${poller} poller: ${e}`);
             }
         }
-        // If no actions founds, set last block at current block for action/poller combo
-        if(response.data.simple_actions.length === 0 && lastBlock > 0){
+        if(lastBlock){
             await setLastActionBlock(params.filter, poller, lastBlock, indexer)
             return;
         }

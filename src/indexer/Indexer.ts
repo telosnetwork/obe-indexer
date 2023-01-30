@@ -64,7 +64,9 @@ export default class Indexer {
         const opts = {
             maximumPoolSize: this.config.dbMaximumPoolSize,
             connectionRetryLimit: this.config.dbConnectionRetries,
-            connectionTimeout: this.config.dbConnectionTimeout
+            connectionTimeout: this.config.dbConnectionTimeout,
+            keepAlive: true,
+            keepAliveInitialDelayMillis: 10000
         };
 
         try {
@@ -83,7 +85,7 @@ export default class Indexer {
             try {
                 await this.runAll();
             } catch (e) {
-                logger.error(`Error in run loop`, e);
+                logger.error(`Error in run loop : ${e}`);
             }
             await sleep(RUN_LOOP_SLEEP);
         }

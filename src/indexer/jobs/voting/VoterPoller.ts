@@ -14,7 +14,7 @@ import {
 } from "@greymass/eosio";
 import {sql} from "slonik";
 import {createLogger} from "../../../util/logger";
-import {paginateTableQuery, getActions, getLastActionBlockISO} from "../../../util/utils";
+import {paginateTableQuery, getActions, getLastActionBlockISO, getLastActionBlock, setLastActionBlock} from "../../../util/utils";
 
 const logger = createLogger('VoterPoller', 'indexer');
 
@@ -95,7 +95,6 @@ export default class VoterPoller {
             await this.doBps()
         }
 
-
         now = new Date();
         if ((this.lastVoterTime + (this.indexer.config.voterPollInterval * 60 * 1000) + this.delay) < now.getTime()) {
             this.delay = (this.delay === 1) ? 12000 : 0;
@@ -139,7 +138,16 @@ export default class VoterPoller {
         if (this.lastVoterTime === 0) {
             await this.doVoterFullLoad();
         } else {
-            await this.doVoterIncremental();
+            const now = new Date();
+            const lastBlock = await getLastActionBlock('eosio:voteproducer', POLLER_ID, this.indexer);
+            const getBlockResponse = await this.chainApi.get_block(lastBlock)
+            const lastBlockTime = getBlockResponse.timestamp.toMilliseconds();
+
+            logger.error(lastBlock);
+            logger.error(lastBlockTime);
+            if(lastBlockTime === 0 || lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000) < now.getTime()){
+                await this.doVoterIncremental();
+            }
         }
     }
 
@@ -162,7 +170,9 @@ export default class VoterPoller {
                                 DO UPDATE
                                 SET last_block  = ${block},
                                     vote_weight = ${lastVoteWeight},
-                                    producers   = ${producers}`;
+                                    producers   = ${producers}
+                                WHERE voters.account = ${account}
+                `;
                 const response = await this.indexer.dbPool?.query(query);
                 logger.debug(`Added voter: ${account}`);
                 return response;
@@ -247,10 +257,6 @@ export default class VoterPoller {
 
         logger.info(`Starting incremental load of voters`);
         const lastBlock = await this.getLastSavedBlock();
-        if(lastBlock === 0){
-            logger.debug('No last block found on table for voters, skipping incremental loads until we find one...')
-            return; // Initial full load not done yet, we stop here.
-        }
         const getInfo = await this.chainApi.get_info()
         const currentLibBlock = getInfo.last_irreversible_block_num.toNumber();
 
@@ -279,7 +285,7 @@ export default class VoterPoller {
         await this.handleStakeAction('eosio:sellrex', startISOSell, endISO, currentLibBlock);
         this.voters = []; // Clear cache of voters
         logger.info(`Done with one incremental load of voters`);
-        this.setLastVoterTimeFromBlock(currentLibBlock);
+        await setLastActionBlock('eosio:voteproducer', POLLER_ID, currentLibBlock, this.indexer);
     }
 
     private async handleStakeAction(actionName: string, startISO: string, endISO: string, currentBlock: number) {

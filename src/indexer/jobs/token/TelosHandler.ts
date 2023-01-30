@@ -45,90 +45,6 @@ export class DelegatedBandwidth extends Struct {
     @Struct.field(Asset) cpu_weight!: Asset
 }
 
-const getStakedBalance = async (delegator: Name, indexer: Indexer) => {
-    const sumQuery = sql`SELECT SUM(net) + SUM(cpu) AS sum
-                         FROM delegations
-                         WHERE from_account = ${String(delegator)}`
-    const stakedSum = await indexer.dbPool?.one(sumQuery)
-    return stakedSum && stakedSum.sum ? stakedSum.sum as string : '0'
-}
-
-export const updateDelegated = async (token: Token, currentBlock: number, indexer: Indexer) => {
-    let more = true
-    let nextKey = ''
-    let count = 0
-    let delegators: Name[] = []
-
-    while (more) {
-        const response = await indexer.antelopeCore.v1.chain.get_table_by_scope({
-            code: 'eosio',
-            table: 'delband',
-            lower_bound: nextKey,
-            limit: 500,
-        })
-
-        if (response.more && response.more !== '') {
-            more = true
-            nextKey = response.more
-        } else {
-            more = false
-        }
-        count += response.rows.length
-        delegators = delegators.concat(
-            response.rows.map((r) => Name.from(r.scope))
-        )
-        logger.info(`Found ${count} scopes for delegated bandwith`)
-    }
-
-    logger.info(
-        `Loading rows for ${count} total delband scopes`
-    )
-
-    for (const delegator of delegators) {
-        await paginateTableQuery(indexer.antelopeCore, {
-            code: 'eosio',
-            // TOOD: once there's a better way to handle accounts like '1' besides adding the space as below, fix this and don't have the space
-            scope: `${String(delegator)} `,
-            table: 'delband',
-            type: DelegatedBandwidth
-        }, async (row: any) => {
-            const from = row.from.toString()
-            const to = row.to.toString()
-            const cpuBalance = String(row.cpu_weight.units)
-            const netBalance = String(row.net_weight.units)
-            await indexer.dbPool?.query(sql`INSERT INTO delegations (from_account, to_account, cpu, net, block)
-                                            VALUES (${from}, ${to}, ${cpuBalance}, ${netBalance}, ${currentBlock})
-                                            ON CONFLICT ON CONSTRAINT delegations_pkey
-                                                DO UPDATE
-                                                SET cpu   = EXCLUDED.cpu,
-                                                    net   = EXCLUDED.net,
-                                                    block = EXCLUDED.block
-            `)
-            if (++count % 50 === 0)
-                logger.info(`Processed ${count} delegations, current account: ${delegator}`)
-        })
-    }
-
-    await indexer.dbPool?.query(sql`DELETE FROM delegations
-                                    WHERE block != ${currentBlock}
-    `)
-
-    for (const delegator of delegators) {
-        const stakedSum = await getStakedBalance(delegator, indexer)
-        const query = sql`
-            INSERT INTO balances (block, token, account, resource_stake, total_balance, rex_stake, liquid_balance)
-            VALUES (${currentBlock}, ${token.id}, ${String(delegator)}, ${String(stakedSum)}, ${String(stakedSum)}, 0,
-                    0)
-            ON CONFLICT ON CONSTRAINT balances_pkey
-                DO UPDATE
-                SET resource_stake = EXCLUDED.resource_stake,
-                    total_balance  = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) +
-                                     COALESCE(EXCLUDED.resource_stake, 0),
-                    block          = EXCLUDED.block`
-        const updated = await indexer.dbPool?.query(query)
-    }
-}
-
 /*
  * UTILS
  *
@@ -164,8 +80,8 @@ const getRexPrice = async (indexer: Indexer) => {
             table: 'rexpool',
             type: RexPool
         })
-        const rexPool = rexPoolResponse.rows[0]
-        return rexPool.total_rex.units.toString() === '0' ? new bigDecimal('0') : bigDecimal.divide(rexPool.total_lendable.units.toString(), rexPool.total_rex.units.toString(), 30)
+        const rexPool = rexPoolResponse.rows[0];
+        return rexPool.total_rex.units.toString() === '0' ? new bigDecimal('0') : bigDecimal.divide(rexPool.total_lendable.units.toString(), rexPool.total_rex.units.toString(), 30);
     } catch (e) {
         logger.error(`Could not retreive rex price: ${e}`)
         return new bigDecimal('0');
@@ -233,6 +149,7 @@ export const loadDelegated = async (token: Token, currentBlock: number, indexer:
                                                 SET cpu   = EXCLUDED.cpu,
                                                     net   = EXCLUDED.net,
                                                     block = EXCLUDED.block
+                                                 WHERE delegations.from_account = ${String(from)} AND delegations.to_account = ${to}
             `);
             if (++count % 50 === 0)
                 logger.info(`Processed ${count} delegations, current delegator: ${delegator} (${index} of ${delegators.length} delagators)`);
@@ -258,8 +175,6 @@ const handleDelegationAction = async (actionName: any, token: Token, startISO: s
             limit: indexer.config.hyperionIncrementLimit,
         }, currentBlock, async (action: any) => {
             const data = action.data;
-            logger.debug(action);
-
             const from = action.data.from.toString();
             const to = action.data.receiver.toString();
 
@@ -281,15 +196,16 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
         const newNetBalance = bigDecimal.subtract(row.net, netAmount).toString();
         const newCPUBalance = bigDecimal.subtract(row.cpu, cpuAmount).toString();
         if(bigDecimal.compareTo(newNetBalance, 0) !== 0 && bigDecimal.compareTo(newCPUBalance, 0) !== 0){
+            logger.debug(`Deleting delegation from ${from} to ${to}`);
             await indexer.dbPool?.query(sql`DELETE FROM delegations WHERE from_account = ${from} AND to_account = ${to}`);
-            logger.debug(`Deleted delegation from ${from} to ${to}`);
         } else {
+            logger.debug(`Decrementing delegation from ${from} to ${to} => new cpu: ${newCPUBalance}, new net: ${newNetBalance}`);
             await indexer.dbPool?.query(sql`UPDATE delegations
                 SET cpu   = ${newCPUBalance},
-                    net   = ${newNetBalance },
+                    net   = ${newNetBalance},
                     block = ${block}
+                WHERE from_account = ${from} AND to_account = ${to}
             `);
-            logger.debug(`Decremented delegation from ${from} to ${to} => new cpu: ${newCPUBalance}, new net: ${newNetBalance}`);
         }
         await updateRexBalancesFromDelegation(token, indexer,  Name.from(from), block);
     } catch (e) {
@@ -302,9 +218,10 @@ const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: 
                 VALUES (${from}, ${to}, ${cpuAmount}, ${netAmount}, ${block})
                 ON CONFLICT ON CONSTRAINT delegations_pkey
                     DO UPDATE
-                    SET cpu   = COALESCE(EXCLUDED.cpu, 0) + COALESCE(balances.cpu, 0),
-                        net   = COALESCE(EXCLUDED.net, 0) + COALESCE(balances.net, 0),
+                    SET cpu   = COALESCE(EXCLUDED.cpu, 0) + COALESCE(delegations.cpu, 0),
+                        net   = COALESCE(EXCLUDED.net, 0) + COALESCE(delegations.net, 0),
                         block = EXCLUDED.block
+                WHERE delegations.from_account = ${String(from)} AND delegations.to_account = ${to}
         `);
         await updateRexBalancesFromDelegation(token, indexer,  Name.from(from), block);
         logger.debug(`Incremented or inserted delegation from ${from} to ${to}`);
@@ -327,6 +244,7 @@ export const loadRexBalancesIncremental = async (token: Token, currentBlock: num
 export const loadRexBalances = async (token: Token, currentBlock: number, indexer: Indexer) => {
     const rexPrice = await getRexPrice(indexer);
     let count = 0;
+    logger.debug(`Querying rex balances table for full load...`);
     await paginateTableQuery(indexer.antelopeCore, {
         code: 'eosio',
         scope: 'eosio',
@@ -335,9 +253,11 @@ export const loadRexBalances = async (token: Token, currentBlock: number, indexe
     }, async (row: any) => {
         if (++count % 50 === 0)
             logger.info(`Processed ${(count)} rex balances, current account processing: ${row.owner.toString()}`);
-        await insertRexBalance(row, rexPrice, token, currentBlock, indexer);
-        try {
-            await indexer.dbPool?.query(sql`
+        return await insertRexBalance(row, rexPrice, token, currentBlock, indexer);
+    });
+    try {
+        logger.debug(`Setting old rex balances to 0...`);
+        return await indexer.dbPool?.query(sql`
                     UPDATE balances
                     SET rex_stake     = 0,
                         total_balance = COALESCE(balances.liquid_balance, 0) +
@@ -345,10 +265,9 @@ export const loadRexBalances = async (token: Token, currentBlock: number, indexe
                                         COALESCE(balances.resource_stake, 0)
                     WHERE block != ${currentBlock} AND token = ${token.id}
                 `);
-        } catch (e) {
-            logger.error(`Could not update rex balances for old blocks: ${e}`)
-        }
-    });
+    } catch (e) {
+        logger.error(`Could not update rex balances for old blocks: ${e}`)
+    }
 }
 const handleRexBalancesAction = async (action: any, token: Token, startISO: string, endISO: string, currentBlock: number, poller: string, indexer: Indexer) => {
     const rexPrice = await getRexPrice(indexer);
@@ -369,8 +288,8 @@ const handleRexBalancesAction = async (action: any, token: Token, startISO: stri
                 scope: 'eosio',
                 table: 'rexbal',
                 type: RexBalance,
-                upper_bound: `${String(account)} `,
-                lower_bound: `${String(account)} `,
+                upper_bound: Name.from(account),
+                lower_bound: Name.from(account),
                 limit: 1,
             }, async (row: any) => {
                 insertRexBalance(row, rexPrice, token, action.block, indexer);
@@ -384,7 +303,7 @@ const handleRexBalancesAction = async (action: any, token: Token, startISO: stri
                             total_balance = COALESCE(balances.liquid_balance, 0) +
                                             COALESCE(balances.rex_stake, 0) +
                                             COALESCE(balances.resource_stake, 0)
-                        WHERE account = ${action.data.from} AND token = ${token.id}
+                        WHERE balances.account = ${action.data.from} AND balances.token = ${token.id}
                     `);
                 } catch (e) {
                     logger.error(`Could not update rex balances for old blocks: ${e}`)
@@ -408,16 +327,17 @@ export const updateRexBalancesFromDelegation = async (token: Token, indexer: Ind
                 SET resource_stake = EXCLUDED.resource_stake,
                     total_balance  = COALESCE(balances.liquid_balance, 0) + COALESCE(balances.rex_stake, 0) +
                                      COALESCE(EXCLUDED.resource_stake, 0),
-                    block          = EXCLUDED.block`
+                    block          = EXCLUDED.block
+                WHERE balances.account = ${String(delegator)} AND balances.token = ${token.id}`
         return await indexer.dbPool?.query(query);
     } catch (e) {
         logger.error(`Could not update rex balance for delegation from ${String(delegator)}: ${e}`);
     }
 }
 export const insertRexBalance = async (row: any, rexPrice: string | bigDecimal, token: Token, currentBlock: number, indexer: Indexer) => {
-    const rexBalance = String(row.rex_balance.units)
-    const account = row.owner.toString()
-    const rexStakeStr = rexBalance === '0' ? '0' : bigDecimal.floor(bigDecimal.multiply(rexBalance, rexPrice)).toString(0)
+    const rexBalance = String(row.rex_balance.units);
+    const account = row.owner.toString();
+    const rexStakeStr = rexBalance === '0' ? '0' : bigDecimal.floor(bigDecimal.multiply(rexBalance, rexPrice)).toString(0);
     try {
         const query = sql`
             INSERT INTO balances (block, token, account, rex_stake, total_balance, resource_stake, liquid_balance)
@@ -427,9 +347,12 @@ export const insertRexBalance = async (row: any, rexPrice: string | bigDecimal, 
                 SET rex_stake     = EXCLUDED.rex_stake,
                     total_balance = COALESCE(balances.liquid_balance, 0) + COALESCE(EXCLUDED.rex_stake, 0) +
                                     COALESCE(balances.resource_stake, 0),
-                    block         = EXCLUDED.block`
-        return await indexer.dbPool?.query(query)
+                    block         = EXCLUDED.block
+                WHERE balances.account = ${String(account)} AND balances.token = ${token.id}
+        `;
+        return await indexer.dbPool?.query(query);
     } catch (e) {
-        logger.error(`Could not insert or update rex balance for ${account} : ${e}`)
+        logger.error(`Could not insert or update rex balance for ${account} : ${e}`);
     }
+    return;
 }
