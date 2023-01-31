@@ -143,8 +143,11 @@ export default class VoterPoller {
             const getBlockResponse = await this.chainApi.get_block(lastBlock)
             const lastBlockTime = getBlockResponse.timestamp.toMilliseconds();
 
-            logger.error(lastBlock);
-            logger.error(lastBlockTime);
+            logger.error(`Last block: ${String(lastBlock)}` );
+            logger.error(`Last block time: ${lastBlockTime}`);
+            logger.error(`Last block time with delay: ${lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000)}`);
+            logger.error(`Now: ${now.getTime()}`);
+            logger.error(`Diff: ${(lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000)) - now.getTime()}`);
             if(lastBlockTime === 0 || lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000) < now.getTime()){
                 await this.doVoterIncremental();
             }
@@ -267,7 +270,7 @@ export default class VoterPoller {
         const endBlockResponse = await this.chainApi.get_block(currentLibBlock)
         const endISO = new Date(endBlockResponse.timestamp.toMilliseconds()).toISOString();
 
-        logger.info(`Querying hyperion actions for voteproducer between ${startISOProducer.toString()} & ${endISO.toString()}`)
+        logger.info(`Querying hyperion actions for eosio:voteproducer between ${startISOProducer.toString()} & ${endISO.toString()}`)
         await getActions(this.indexer, POLLER_ID, {
             after: startISOProducer,
             before: endISO,

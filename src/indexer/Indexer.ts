@@ -59,14 +59,14 @@ export default class Indexer {
         ];
 
         // TODO: configure this or just disable in production code
-        //const opts = {interceptors};
+        // const opts = {interceptors};
         logger.debug(`Creating db pool with max size: ${this.config.dbMaximumPoolSize} & retries limit: ${this.config.dbConnectionRetries}`);
         const opts = {
             maximumPoolSize: this.config.dbMaximumPoolSize,
+            minimumPoolSize: 1,
             connectionRetryLimit: this.config.dbConnectionRetries,
             connectionTimeout: this.config.dbConnectionTimeout,
-            keepAlive: true,
-            keepAliveInitialDelayMillis: 10000
+            idleTimeout: 100,
         };
 
         try {
