@@ -4,6 +4,10 @@
 
 ### Docker
 
+Use
+`bash runDockerPostgres.sh`
+Or
+
 ```bash
 docker run \
     --name postgres \
@@ -14,7 +18,7 @@ docker run \
     postgres
 ```
 
-Then connect `psql -U postgres -h localhost -p 5455` and create the db
+Then connect `psql -U postgres -h localhost -p 5455` and create the database and privileged user by pasting the following snippet:
 
 ```postgresql
 CREATE DATABASE obeindex;
@@ -22,7 +26,7 @@ CREATE USER obe WITH ENCRYPTED PASSWORD 'obe';
 GRANT ALL PRIVILEGES ON DATABASE obeindex to obe;
 ```
 
-Now paste all the tables in there and create those too, or write a script and put it
+Now paste all the tables defined in `src/tables` and create those too, or write a script to do it
 
 ```bash
 HERE
@@ -31,7 +35,7 @@ HERE
 ## Operator Setup
 
 Nodeos Setup:  
-The OBE Indexer does not have functionality for handeling forks so it must be pointed at a nodeos instance running in irreversible mode. More on that can be read here: https://developers.eos.io/manuals/eos/v2.2/nodeos/features/storage-and-read-modes
+The OBE Indexer does not have functionality for handling forks so it must be pointed at a nodeos instance running in irreversible mode. More on that can be read here: https://developers.eos.io/manuals/eos/v2.2/nodeos/features/storage-and-read-modes
 
 Within your nodeos config.ini file you will use with the indexer, be sure to include the option:  
 ```read-mode = irreversible```
@@ -80,6 +84,9 @@ Buld the Indexer
 
 Run the Indexer  
 ```nohup node dist/indexer.js > obeIndexer.log 2>&1 &```
+
+Run the API
+```nohup node dist/api.js > obeApi.log 2>&1 &```
 
 
 
