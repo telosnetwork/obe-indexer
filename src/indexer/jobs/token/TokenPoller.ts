@@ -70,7 +70,7 @@ export default class TokenPoller {
         for (const token of this.tokens) {
             try {
                 await this.doToken(token);
-                // TODO: Some cleaup action that finds any balances with zero values for all of liquid/rex/resources and deletes them
+                await this.cleanBalances(token);
             } catch (e) {
                 logger.error(`Failure in doToken for ${token.name}: ${e}`);
             }
@@ -78,6 +78,15 @@ export default class TokenPoller {
         logger.info(`Do tokens complete!!`);
     }
 
+    private async cleanBalances(token: Token){
+        logger.info(`Cleaning empty balances for ${token.name} (${token.symbol})`);
+        try {
+            await this.indexer.dbPool?.query(sql`DELETE FROM balances WHERE liquid_balance = 0 AND stake_resource = 0 AND rex_stake = 0 AND token = ${token.id}`);
+            logger.info(`Removed all empty balances of ${token.name} (${token.symbol})`);
+        } catch (e) {
+            logger.error(`Could not remove empty balances for ${token.name} (${token.symbol}): ${e}`);
+        }
+    }
     private async doToken(token: Token) {
         logger.info(`Start of ${token.name} (${token.symbol})`);
         const lastBlock = await this.getTokenLastBlock(token);
