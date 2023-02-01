@@ -70,7 +70,7 @@ export const getLastActionsBlock = async (actions: Array<string>, poller: string
     try {
         const row = await indexer.dbPool?.maybeOne(sql`SELECT MAX(block) as block FROM sync_status WHERE action = ANY(${sql.array(actions, 'text')}) AND poller = ${poller}`);
         if(!row) return 0; // Nothing found
-        logger.info(`Last block found for ${actions.length} action(s) of the ${poller} poller : ${row.block}`)
+        logger.debug(`Last block found for ${actions.length} action(s) of the ${poller} poller : ${row.block}`)
         return row.block as number || 0;
     } catch (e) {
         logger.error(`Could not retreive last block for ${actions.length} action(s) of the ${poller} poller : ${e}`)
@@ -81,26 +81,29 @@ export const getLastActionBlock = async (action: string, poller: string, indexer
     try {
         const row = await indexer.dbPool?.maybeOne(sql`SELECT block FROM sync_status WHERE action = ${action} AND poller = ${poller}`);
         if(!row) return 0; // Nothing found
-        logger.info(`Last block found for the ${action} action of the ${poller} poller : ${row.block}`)
+        logger.debug(`Last block found for the ${action} action of the ${poller} poller : ${row.block}`)
         return row.block as number;
     } catch (e) {
         logger.error(`Could not retreive last block for action ${action} of the ${poller} poller : ${e}`)
         return 0;
     }
 }
-export  async function getActions(indexer: Indexer, poller: string, params: any, lastBlock: number, callback: Function){
+export async function getActions(indexer: Indexer, poller: string, params: any, lastBlock: number, callback: Function){
     if(Date.parse(params.after) >= Date.parse(params.before)){
         logger.debug(`After date ${params.after} is above or equal to before data ${params.before}, skipping....`)
         return;
     }
     try {
+        let count = 0;
         logger.debug(`Handling ${params.filter} action...`);
         const response = await indexer.hyperion.get(`v2/history/get_actions`, { params });
         logger.info(`Received ${response.data.simple_actions.length} ${params.filter} action(s) for ${poller} poller`);
         for (const action of response.data.simple_actions) {
             try {
-                await callback(action);
-                if(lastBlock){
+                await callback(count, action);
+                count++;
+                // If last iteration and there might be more (limit reached) overwrite last block
+                if(lastBlock && count >= indexer.config.hyperionIncrementLimit){
                     lastBlock = action.block;
                 }
             } catch (e) {
@@ -109,7 +112,6 @@ export  async function getActions(indexer: Indexer, poller: string, params: any,
         }
         if(lastBlock){
             await setLastActionBlock(params.filter, poller, lastBlock, indexer)
-            return;
         }
     } catch (e) {
         logger.error(`Failure retreiving ${params.filter} actions for ${poller} poller: ${e}`);

@@ -14,7 +14,7 @@ import {
 } from "@greymass/eosio";
 import {sql} from "slonik";
 import {createLogger} from "../../../util/logger";
-import {paginateTableQuery, getActions, getLastActionBlockISO, getLastActionBlock, setLastActionBlock} from "../../../util/utils";
+import {paginateTableQuery, getActions, getLastActionBlockISO, getLastActionsBlock, setLastActionBlock} from "../../../util/utils";
 
 const logger = createLogger('VoterPoller', 'indexer');
 
@@ -72,6 +72,7 @@ export default class VoterPoller {
     private indexer: Indexer
     private chainApi: ChainAPI
     private lastVoterTime: number;
+    private lastVoterBlock: number;
     private lastBpTime: number;
     private delay: number;
     private voters: Voter[];
@@ -80,6 +81,7 @@ export default class VoterPoller {
         this.indexer = indexer
         this.chainApi = this.indexer.antelopeCore.v1.chain
         this.lastVoterTime = 0;
+        this.lastVoterBlock = 0;
         this.lastBpTime = 0;
         this.delay = 1;
         this.voters = [];
@@ -87,18 +89,21 @@ export default class VoterPoller {
 
     async run() {
 
-        await this.setLastBpTime()
-        await this.setLastVoterTime()
+        await this.setLastBpTime();
+        await this.setLastVoter();
 
-        let now = new Date();
-        if ((this.lastBpTime + (this.indexer.config.bpPollInterval * 60 * 1000)) < now.getTime()) {
+        let now = new Date().getTime();
+        if ((this.lastBpTime + (this.indexer.config.bpPollInterval * 60 * 1000)) < now) {
             await this.doBps()
         }
 
-        now = new Date();
-        if ((this.lastVoterTime + (this.indexer.config.voterPollInterval * 60 * 1000) + this.delay) < now.getTime()) {
+        const getInfo = await this.chainApi.get_info()
+        let currentLibBlock = getInfo.last_irreversible_block_num.toNumber();
+        const getCurrentBlockResponse = await this.chainApi.get_block(currentLibBlock);
+        now = getCurrentBlockResponse.timestamp.toMilliseconds();
+        if ((this.lastVoterTime + (this.indexer.config.voterPollInterval * 60 * 1000) + this.delay) < now) {
             this.delay = (this.delay === 1) ? 12000 : 0;
-            await this.doVoters();
+            await this.doVoters(currentLibBlock);
         }
     }
 
@@ -115,42 +120,41 @@ export default class VoterPoller {
         this.lastBpTime = Number(snapshotResult.max)
     }
 
-    private async setLastVoterTime() {
+    private async setLastVoter() {
         if (this.lastVoterTime !== 0) {
             return;
         }
 
-        const voterResult = await this.getLastSavedBlock()
+        let block = await getLastActionsBlock(['eosio:voteproducer', 'eosio:buyrex', 'eosio:sellrex'], POLLER_ID, this.indexer);
 
-        if (!voterResult) {
+        if(!block){
+            block = Number(await this.getLastSavedBlock());
+        }
+
+        if (!block) {
             return;
         }
 
-        await this.setLastVoterTimeFromBlock(Number(voterResult))
+        await this.setLastVoterFromBlock(block)
     }
 
-    private async setLastVoterTimeFromBlock(block: number) {
-        const getBlockResponse = await this.chainApi.get_block(block)
-        this.lastVoterTime = getBlockResponse.timestamp.toMilliseconds()
-    }
-
-    private async doVoters() {
-        if (this.lastVoterTime === 0) {
-            await this.doVoterFullLoad();
-        } else {
-            const now = new Date();
-            const lastBlock = await getLastActionBlock('eosio:voteproducer', POLLER_ID, this.indexer);
-            const getBlockResponse = await this.chainApi.get_block(lastBlock)
-            const lastBlockTime = getBlockResponse.timestamp.toMilliseconds();
-
-            logger.error(`Last block: ${String(lastBlock)}` );
-            logger.error(`Last block time: ${lastBlockTime}`);
-            logger.error(`Last block time with delay: ${lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000)}`);
-            logger.error(`Now: ${now.getTime()}`);
-            logger.error(`Diff: ${(lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000)) - now.getTime()}`);
-            if(lastBlockTime === 0 || lastBlockTime + (this.indexer.config.voterPollInterval * 60 * 1000) < now.getTime()){
-                await this.doVoterIncremental();
+    private async setLastVoterFromBlock(block: number) {
+        if(block > this.lastVoterBlock){
+            this.lastVoterBlock = block;
+            try {
+                const getBlockResponse = await this.chainApi.get_block(block);
+                this.lastVoterTime = getBlockResponse.timestamp.toMilliseconds();
+            } catch (e) {
+                logger.error(`Could not retreive block info from API: ${e}`)
             }
+        }
+    }
+
+    private async doVoters(currentLibBlock: number) {
+        if (this.lastVoterTime === 0) {
+            await this.doVoterFullLoad(currentLibBlock);
+        } else {
+            await this.doVoterIncremental(currentLibBlock);
         }
     }
 
@@ -174,7 +178,7 @@ export default class VoterPoller {
                                 SET last_block  = ${block},
                                     vote_weight = ${lastVoteWeight},
                                     producers   = ${producers}
-                                WHERE voters.account = ${account}
+                                WHERE voters.voter = ${account}
                 `;
                 const response = await this.indexer.dbPool?.query(query);
                 logger.debug(`Added voter: ${account}`);
@@ -189,13 +193,10 @@ export default class VoterPoller {
         }
     }
 
-    private async doVoterFullLoad() {
+    private async doVoterFullLoad(currentLibBlock: number) {
         logger.info(`Starting full load of voters...`);
 
         let count = 0;
-        const getInfo = await this.chainApi.get_info();
-        const currentLibBlock = await getInfo.last_irreversible_block_num.toNumber();
-
         try {
             await paginateTableQuery(this.indexer.antelopeCore, {
                 code: 'eosio',
@@ -214,7 +215,7 @@ export default class VoterPoller {
             logger.error(`Failure doing voters table query: ${e}`)
         }
 
-        this.setLastVoterTimeFromBlock(currentLibBlock)
+        this.setLastVoterFromBlock(currentLibBlock)
         logger.info(`Done with full load of voters`)
     }
     private async getVoterWeight(voter: string) {
@@ -256,21 +257,18 @@ export default class VoterPoller {
     //
     // > We do not use wildcard for action filter because eosio has a lot of actions, including the onblock action (once per block), instead we make 3 separate hyperion queries
     // > We limit results in case we are far from synced
-    private async doVoterIncremental() {
+    private async doVoterIncremental(currentLibBlock: number) {
 
         logger.info(`Starting incremental load of voters`);
-        const lastBlock = await this.getLastSavedBlock();
-        const getInfo = await this.chainApi.get_info()
-        const currentLibBlock = getInfo.last_irreversible_block_num.toNumber();
 
         // We get last block saved for each action (or last voter table block if not set yet) so that if the limit we set makes one action way ahead of others (ie: one had lots of calls, the other only a few) we can still recover after crash
-        const startISOProducer = await getLastActionBlockISO('eosio:voteproducer', POLLER_ID, this.indexer, this.chainApi, lastBlock, 1)
-        const startISOBuy = await getLastActionBlockISO('eosio:buyrex', POLLER_ID, this.indexer, this.chainApi, lastBlock, 1)
-        const startISOSell = await getLastActionBlockISO('eosio:sellrex', POLLER_ID, this.indexer, this.chainApi, lastBlock, 1);
+        const startISOProducer = await getLastActionBlockISO('eosio:voteproducer', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock, 1)
+        const startISOBuy = await getLastActionBlockISO('eosio:buyrex', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock, 1)
+        const startISOSell = await getLastActionBlockISO('eosio:sellrex', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock, 1);
         const endBlockResponse = await this.chainApi.get_block(currentLibBlock)
         const endISO = new Date(endBlockResponse.timestamp.toMilliseconds()).toISOString();
-
         logger.info(`Querying hyperion actions for eosio:voteproducer between ${startISOProducer.toString()} & ${endISO.toString()}`)
+        let lastBlock = currentLibBlock;
         await getActions(this.indexer, POLLER_ID, {
             after: startISOProducer,
             before: endISO,
@@ -278,21 +276,25 @@ export default class VoterPoller {
             filter: 'eosio:voteproducer',
             simple: true,
             limit: this.indexer.config.hyperionIncrementLimit,
-        }, currentLibBlock, async (action: any) => {
+        }, currentLibBlock, async (index: number, action: any) => {
             const data = action.data;
             data.last_vote_weight = await this.getVoterWeight(data.voter);
             data.owner = data.voter;
             await this.insertVoter(data, action.block);
+            if((index + 1) >= this.indexer.config.hyperionIncrementLimit){
+                lastBlock = action.block;
+            }
         })
+        await this.setLastVoterFromBlock(lastBlock);
         await this.handleStakeAction('eosio:buyrex', startISOBuy, endISO, currentLibBlock);
         await this.handleStakeAction('eosio:sellrex', startISOSell, endISO, currentLibBlock);
         this.voters = []; // Clear cache of voters
         logger.info(`Done with one incremental load of voters`);
-        await setLastActionBlock('eosio:voteproducer', POLLER_ID, currentLibBlock, this.indexer);
     }
 
     private async handleStakeAction(actionName: string, startISO: string, endISO: string, currentBlock: number) {
-        logger.info(`Querying hyperion actions for ${actionName} between ${startISO.toString()} & ${endISO.toString()}`)
+        logger.info(`Querying hyperion actions for ${actionName} between ${startISO.toString()} & ${endISO.toString()}`);
+        let lastBlock = currentBlock;
         await getActions(this.indexer, POLLER_ID, {
             after: startISO,
             before: endISO,
@@ -300,7 +302,7 @@ export default class VoterPoller {
             filter: actionName,
             simple: true,
             limit: this.indexer.config.hyperionIncrementLimit,
-        }, currentBlock, async (action: any) => {;
+        }, currentBlock, async (index: number, action: any) => {;
             let data = action.data;
             logger.debug(`Retreived one ${actionName} action from ${data.from} at block ${action.block}`);
             data.last_vote_weight = await this.getVoterWeight(data.from);
@@ -310,7 +312,11 @@ export default class VoterPoller {
             } catch (e) {
                 logger.error(`Failure updating voters table: ${e}`)
             }
-        })
+            if((index + 1) >= this.indexer.config.hyperionIncrementLimit){
+                lastBlock = action.block;
+            }
+        });
+        await this.setLastVoterFromBlock(lastBlock);
     }
     private async doBps() {
         logger.info(`Doing BP snapshot...`)

@@ -173,7 +173,7 @@ const handleDelegationAction = async (actionName: any, token: Token, startISO: s
             filter: actionName,
             simple: true,
             limit: indexer.config.hyperionIncrementLimit,
-        }, currentBlock, async (action: any) => {
+        }, currentBlock, async (index: number, action: any) => {
             const data = action.data;
             const from = action.data.from.toString();
             const to = action.data.receiver.toString();
@@ -279,7 +279,7 @@ const handleRexBalancesAction = async (action: any, token: Token, startISO: stri
             filter: action,
             simple: true,
             limit: indexer.config.hyperionIncrementLimit,
-        }, currentBlock, async (action: any) => {
+        }, currentBlock, async (index: number, action: any) => {
             let count = 0;
             let account = Name.from(action.data.from);
             // TOOD: once there's a better way to handle accounts like '1' besides adding the space in upper_bound & lower_bound as below, fix this and don't have the space
