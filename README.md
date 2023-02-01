@@ -6,25 +6,32 @@ This repository's instructions requires Docker to be installed but alternatively
 
 ## Developer Setup
 
-Install node v.16
+**Install node v.16**
 
 ```curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -```
 ```sudo apt-get install -y nodejs```
 
-Clone the OBE Indexer  
+**Clone the OBE Indexer**
+
 ```git clone https://github.com/telosnetwork/obe-indexer```
 
-Copy example.config.json to config.json and edit it for your DB, Hyp and Nodeos connection. Make sure to note the default port for psql is 5455. The config in git is set differently for the docker dev version. Also be sure the `nodeosUrl` is pointed to your node running in irreversible mode.
+**Copy example.config.json to config.json and edit it for your DB, Hyp and Nodeos connection.**
+
+Make sure to note the default port for psql is 5455. The config in git is set differently for the docker dev version. Also be sure the `nodeosUrl` is pointed to your node running in irreversible mode.
 
 ```read-mode = irreversible```
 
-Install Yarn  
+**Install Yarn** 
+
 ```sudo npm install --global yarn```
 
-Install Dependencies  
+**Install Dependencies** 
+
 ```yarn ```
 
-Setup postgres using `bash runDockerPostgres.sh` or
+**Setup postgres** 
+
+Using `bash runDockerPostgres.sh` or
 
 ```bash
 docker run \
@@ -55,6 +62,8 @@ HERE
 The OBE Indexer does not have functionality for handling forks so it must be pointed at a nodeos instance running in irreversible mode. More on that can be read here: https://developers.eos.io/manuals/eos/v2.2/nodeos/features/storage-and-read-modes
 
 Within your nodeos config.ini file you will use with the indexer, be sure to include the option:  
+
+```read-mode = irreversible```
 
 ## Build
 Build the Indexer with
