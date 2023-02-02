@@ -1,4 +1,6 @@
-# YAAI - Yet Another Antelope Indexer
+# OBE Indexer - Antelope Indexer for Open Block Explorer
+
+This is an Antelope indexer developed for our [Open Block Explorer](https://github.com/telosnetwork/open-block-explorer)
 
 ## Requirement
 

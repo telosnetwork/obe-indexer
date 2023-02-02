@@ -6,21 +6,17 @@ import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
 
 const delegationsQueryString = Type.Object({
     from: Type.Optional(Type.String({
-        examples: ['delegatooorr'],
         description: 'Account name for the account that has delegated staked resources',
     })),
     to: Type.Optional(Type.String({
-        examples: ['delegateeee'],
         description: 'Account name for the account that has received the staked resources'
     })),
     limit: Type.Optional(Type.Number({
-        examples: [500],
         description: 'Maximum number of results to retreive (max: 500)',
         default: 100,
         maximum: 500
     })),
     offset: Type.Optional(Type.Number({
-        examples: [0],
         description: 'Offsets results for pagination (skips first X)',
         default: 0
     }))
@@ -49,11 +45,11 @@ const delegationRow = Type.Object({
 
 type DelegationRow = Static<typeof delegationRow>
 
-const deletagionsResponseSchema = Type.Object({
+const delegationsResponseSchema = Type.Object({
     delegations: Type.Array(delegationRow)
 })
 
-type DelegationsResponse = Static<typeof deletagionsResponseSchema>
+type DelegationsResponse = Static<typeof delegationsResponseSchema>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Querystring: DelegationsQueryString, Reply: DelegationsResponse | ErrorResponseType }>('/delegations', {
@@ -61,7 +57,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             tags: ['tokens'],
             querystring: delegationsQueryString,
             response: {
-                200: deletagionsResponseSchema,
+                200: delegationsResponseSchema,
                 404: errorResponse
             }
         }

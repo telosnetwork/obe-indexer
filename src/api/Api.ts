@@ -83,8 +83,8 @@ export default class Api {
         await this.fastify.register(fastifySwagger, {
             swagger: {
                 info: {
-                    title: 'Telos Native Stats',
-                    description: 'Telos Native Stats APIs',
+                    title: 'Telos OBE API',
+                    description: 'API for Telos Open Block Explorer',
                     version: '0.1.0'
                 },
                 externalDocs: {
@@ -95,7 +95,8 @@ export default class Api {
                 schemes: this.config.apiProtocols,
                 tags: [
                     {name: 'chain', description: 'Chain statistics endpoints'},
-                    {name: 'tokens', description: 'Token stats endpoints'}
+                    {name: 'tokens', description: 'Token stats endpoints'},
+                    {name: 'voters', description: 'Voter stats endpoints'}
                 ]
             }
         })

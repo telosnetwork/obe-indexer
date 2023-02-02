@@ -81,7 +81,7 @@ export default class TokenPoller {
     private async cleanBalances(token: Token){
         logger.info(`Cleaning empty balances for ${token.name} (${token.symbol})`);
         try {
-            await this.indexer.dbPool?.query(sql`DELETE FROM balances WHERE liquid_balance = 0 AND stake_resource = 0 AND rex_stake = 0 AND token = ${token.id}`);
+            await this.indexer.dbPool?.query(sql`DELETE FROM balances WHERE liquid_balance = 0 AND resource_stake = 0 AND rex_stake = 0 AND token = ${token.id}`);
             logger.info(`Removed all empty balances of ${token.name} (${token.symbol})`);
         } catch (e) {
             logger.error(`Could not remove empty balances for ${token.name} (${token.symbol}): ${e}`);

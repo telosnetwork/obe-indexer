@@ -195,6 +195,7 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
         if(!row) return; // Nothing to decrement
         const newNetBalance = bigDecimal.subtract(row.net, netAmount).toString();
         const newCPUBalance = bigDecimal.subtract(row.cpu, cpuAmount).toString();
+        logger.debug(`delegation from ${from} to ${to} => new cpu: ${newCPUBalance}, new net: ${newNetBalance}`);
         if(bigDecimal.compareTo(newNetBalance, 0) !== 0 && bigDecimal.compareTo(newCPUBalance, 0) !== 0){
             logger.debug(`Deleting delegation from ${from} to ${to}`);
             await indexer.dbPool?.query(sql`DELETE FROM delegations WHERE from_account = ${from} AND to_account = ${to}`);
@@ -209,7 +210,7 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
         }
         await updateRexBalancesFromDelegation(token, indexer,  Name.from(from), block);
     } catch (e) {
-        logger.error(`Could not decrement or delete delegation from ${from} to ${to}: ${e}`);
+        logger.error(`Could not decrement or delete delegation from ${from} to ${to}: ${e} `);
     }
 }
 const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {

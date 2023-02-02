@@ -169,13 +169,11 @@ export function sleep(ms: number) {
 
 export const paginationQueryParams = Type.Object({
     limit: Type.Optional(Type.Number({
-        examples: [500],
         description: 'Maximum number of results to retreive (max: 500)',
         default: 100,
         maximum: 500
     })),
     offset: Type.Optional(Type.Number({
-        examples: [0],
         description: 'Offsets results for pagination (skips first X)',
         default: 0
     }))
