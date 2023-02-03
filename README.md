@@ -23,6 +23,10 @@ Make sure to note the default port for psql is 5432. The config in git is set di
 
 ```read-mode = irreversible```
 
+**Copy .env.sample to .env**
+
+Configure the mode (dev|prod) & log levels for indexer and api
+
 **Install Yarn** 
 
 ```sudo npm install --global yarn```
