@@ -41,6 +41,10 @@ const holdersRow = Type.Object({
 type HoldersRow = Static<typeof holdersRow>
 
 const holdersResponseSchema = Type.Object({
+    totalHolders: Type.Number({
+        example: 13313,
+        description: 'The total count of holders for that token'
+    }),
     totalSupply: Type.String({
         example: '123456789.0123456789',
         description: 'A string representation of supply, possibly too large for a Number type, use a big number library to consume it as a number'
@@ -79,7 +83,9 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const decimals = decimalsFromSupply(String(token.supply))
 
         const holders = await fastify.dbPool.query(sql`SELECT * FROM balances WHERE token = ${id} ORDER BY total_balance DESC LIMIT ${limit} OFFSET ${offset}`)
+        const holdersCount = await fastify.dbPool.maybeOne(sql`SELECT COUNT(*) as total FROM balances WHERE token = ${id}`)
         const holdersResponse: HoldersResponse = {
+            totalHolders: (holdersCount) ? holdersCount.total as number: 0,
             totalSupply: String(token.supply).split(' ')[0],
             holders: holders.rows.map((balanceRow): HoldersRow => {
                 if(id === "eosio.token:TLOS"){

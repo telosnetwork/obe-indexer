@@ -25,6 +25,10 @@ const votersRow = Type.Object({
 type VotersRow = Static<typeof votersRow>
 
 const votersResponseSchema = Type.Object({
+    totalVoters: Type.Number({
+        example: '112',
+        description: 'The total count of voters for this producer'
+    }),
     voters: Type.Array(votersRow)
 })
 
@@ -46,7 +50,9 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const limit = request.query.limit || 100;
         const offset = request.query.offset || 0;
         const voters = await fastify.dbPool.query(sql`SELECT * FROM voters WHERE ${request.params.producer}=ANY(producers) ORDER BY vote_weight DESC LIMIT ${limit} OFFSET ${offset}`)
+        const votersCount = await fastify.dbPool.maybeOne(sql`SELECT COUNT(*) as count FROM voters WHERE ${request.params.producer}=ANY(producers)`)
         const votersResponse: VotersResponse = {
+            totalVoters: (votersCount) ? votersCount.count as number : 0,
             voters: voters.rows.map((row): VotersRow => {
                 return {
                     account: String(row.voter),
