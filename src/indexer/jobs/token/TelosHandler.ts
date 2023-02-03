@@ -201,7 +201,7 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
         const newNetBalance = bigDecimal.subtract(row.net, net).toString();
         const newCPUBalance = bigDecimal.subtract(row.cpu, cpu).toString();
 
-        if(bigDecimal.compareTo(newNetBalance, 0) !== 0 && bigDecimal.compareTo(newCPUBalance, 0) !== 0){
+        if(bigDecimal.compareTo(newNetBalance, 0) < 1 && bigDecimal.compareTo(newCPUBalance, 0) < 1){
             await indexer.dbPool?.query(sql`DELETE FROM delegations WHERE from_account = ${from} AND to_account = ${to}`);
         } else {
             await indexer.dbPool?.query(sql`UPDATE delegations
