@@ -21,11 +21,11 @@ This repository's instructions requires Docker to be installed but alternatively
 
 Make sure to note the default port for psql is 5432. The config in git is set differently for the docker dev version. Also be sure the `nodeosUrl` is pointed to your node running in irreversible mode.
 
+```read-mode = irreversible```
+
 **Copy .env.sample to .env**
 
 Configure the mode (dev|prod) & log levels for indexer and api
-
-```read-mode = irreversible```
 
 **Install Yarn** 
 
