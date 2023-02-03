@@ -19,7 +19,7 @@ This repository's instructions requires Docker to be installed but alternatively
 
 **Copy example.config.json to config.json and edit it for your DB, Hyp and Nodeos connection.**
 
-Make sure to note the default port for psql is 5455. The config in git is set differently for the docker dev version. Also be sure the `nodeosUrl` is pointed to your node running in irreversible mode.
+Make sure to note the default port for psql is 5432. The config in git is set differently for the docker dev version. Also be sure the `nodeosUrl` is pointed to your node running in irreversible mode.
 
 ```read-mode = irreversible```
 
