@@ -88,6 +88,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             totalHolders: (holdersCount) ? holdersCount.total as number: 0,
             totalSupply: String(token.supply).split(' ')[0],
             holders: holders.rows.map((balanceRow): HoldersRow => {
+                // TODO: Load base currency from config
                 if(id === "eosio.token:TLOS"){
                     return {
                         account: String(balanceRow.account),

@@ -85,11 +85,11 @@ export default class Api {
                 info: {
                     title: 'Telos OBE API',
                     description: 'API for Telos Open Block Explorer',
-                    version: '0.1.0'
+                    version: '1.0.0'
                 },
                 externalDocs: {
                     url: 'https://docs.telos.net',
-                    description: 'Find more info here'
+                    description: 'Find more info in our documentation'
                 },
                 host: `${this.config.apiHost}`,
                 schemes: this.config.apiProtocols,

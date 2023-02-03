@@ -95,7 +95,7 @@ export default class TokenPoller {
         } else {
             await this.doTokenIncremental(lastBlock, token);
         }
-        if (token.id === 'eosio.token:TLOS') {
+        if (token.id === `${this.indexer.config.baseCurrencyContract}:${this.indexer.config.baseCurrencySymbol}`) {
             await this.doStakeBalances(token);
         }
         logger.info(`End of ${token.name} (${token.symbol})`);

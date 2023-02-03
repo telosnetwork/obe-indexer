@@ -2,6 +2,8 @@ export interface IndexerConfig {
     apiAddress: string
     apiPort: number
     apiHost: string
+    baseCurrencyContract: string
+    baseCurrencySymbol: string
     apiProtocols: string[]
     tokenListUrl: string
     nodeosUrl: string
@@ -28,4 +30,8 @@ export interface RetryFetchOpts {
     attempts: number
     delay: number
     silent: boolean
+}
+
+export interface NetworkOpts {
+    networkName: string
 }
