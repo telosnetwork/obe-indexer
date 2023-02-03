@@ -94,7 +94,6 @@ export default class Api {
                 host: `${this.config.apiHost}`,
                 schemes: this.config.apiProtocols,
                 tags: [
-                    {name: 'chain', description: 'Chain statistics endpoints'},
                     {name: 'tokens', description: 'Token stats endpoints'},
                     {name: 'voters', description: 'Voter stats endpoints'}
                 ]
