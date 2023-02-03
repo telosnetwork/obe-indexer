@@ -5,6 +5,7 @@ import {ChainAPI, APIClient} from "@greymass/eosio";
 import {createLogger} from "./logger";
 import Indexer from "../indexer/Indexer";
 const logger = createLogger('Common utils', 'indexer');
+import bigDecimal from "js-big-decimal";
 import {sql} from "slonik";
 
 /* FETCH */
@@ -41,6 +42,9 @@ export function balanceToDecimals(balance: string, decimals: number): string {
         return `0.${balance.padStart(decimals, '0')}`;
 
     return `${balance.substring(0, len - decimals)}.${balance.substring(len - decimals)}`;
+}
+export function toWei(amount: string | number | bigDecimal, precision: number){
+    return bigDecimal.multiply(amount, Math.pow(10 , precision));
 }
 
 /* ANTELOPE ACTIONS  */

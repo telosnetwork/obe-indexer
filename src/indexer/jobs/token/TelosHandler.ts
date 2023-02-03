@@ -5,7 +5,7 @@ import {sql} from "slonik";
 import {Token} from "../../../types/tokens";
 import bigDecimal from "js-big-decimal";
 import {createLogger} from "../../../util/logger";
-import {getBlockISO} from "../../../util/utils";
+import {getBlockISO, toWei} from "../../../util/utils";
 
 const logger = createLogger('TelosHandler', 'indexer')
 
@@ -195,8 +195,8 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
         if(!row) return; // Nothing to decrement
 
         // Remember to get rid of decimals places
-        const cpu = cpuAmount.replace('.', '');
-        const net = netAmount.replace('.', '');
+        const cpu = toWei(cpuAmount, 4);
+        const net =  toWei(netAmount, 4);
 
         const newNetBalance = bigDecimal.subtract(row.net, net).toString();
         const newCPUBalance = bigDecimal.subtract(row.cpu, cpu).toString();
@@ -218,8 +218,8 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
 }
 const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
     logger.debug(`Incrementing or inserting delegation from ${from} to ${to}`);
-    const cpu = parseInt(cpuAmount.replace('.', ''));
-    const net = parseInt(netAmount.replace('.', ''));
+    const cpu = toWei(cpuAmount, 4);
+    const net =  toWei(netAmount, 4);
     try {
         await indexer.dbPool?.query(sql`INSERT INTO delegations (from_account, to_account, cpu, net, block)
                 VALUES (${String(from)}, ${String(to)}, ${String(cpu)}, ${String(net)}, ${block})
