@@ -149,7 +149,7 @@ export const loadDelegated = async (token: Token, currentBlock: number, indexer:
                                                 SET cpu   = EXCLUDED.cpu,
                                                     net   = EXCLUDED.net,
                                                     block = EXCLUDED.block
-                                                 WHERE delegations.from_account = ${String(from)} AND delegations.to_account = ${to}
+                                                 WHERE delegations.from_account = ${String(from)} AND delegations.to_account = ${String(to)}
             `);
             if (++count % 50 === 0)
                 logger.info(`Processed ${count} delegations, current delegator: ${delegator} (${index} of ${delegators.length} delagators)`);
@@ -177,11 +177,10 @@ const handleDelegationAction = async (actionName: any, token: Token, startISO: s
             const data = action.data;
             const from = action.data.from.toString();
             const to = action.data.receiver.toString();
-
-            if(action.name === "eosio:delegatebw"){
-                insertOrIncrementDelegation(token, indexer, from, to, String(action.data.stake_cpu_quantity), String(action.data.stake_net_quantity), action.block);
+            if(actionName === 'eosio:delegatebw'){
+                return await insertOrIncrementDelegation(token, indexer, from, to, String(action.data.stake_cpu_quantity), String(action.data.stake_net_quantity), action.block as number);
             } else {
-                deleteOrDecrementDelegation(token, indexer, from, to, String(action.data.unstake_cpu_quantity), String(action.data.unstake_net_quantity), action.block);
+                return await deleteOrDecrementDelegation(token, indexer, from, to, String(action.data.unstake_cpu_quantity), String(action.data.unstake_net_quantity), action.block as number);
             }
         })
     } catch (e) {
@@ -190,22 +189,26 @@ const handleDelegationAction = async (actionName: any, token: Token, startISO: s
 
 }
 const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
+    logger.debug(`Deleting or decrementing delegation from ${from} to ${to}`);
     try {
-        const row = await indexer.dbPool?.maybeOne(sql`SELECT cpu, net FROM delegations WHERE from_account = ${from} AND to_account = ${to}`);
+        const row = await indexer.dbPool?.maybeOne(sql`SELECT cpu, net FROM delegations WHERE from_account = ${String(from)} AND to_account = ${String(to)}`);
         if(!row) return; // Nothing to decrement
-        const newNetBalance = bigDecimal.subtract(row.net, netAmount).toString();
-        const newCPUBalance = bigDecimal.subtract(row.cpu, cpuAmount).toString();
-        logger.debug(`delegation from ${from} to ${to} => new cpu: ${newCPUBalance}, new net: ${newNetBalance}`);
+
+        // Remember to get rid of decimals places
+        const cpu = cpuAmount.replace('.', '');
+        const net = netAmount.replace('.', '');
+
+        const newNetBalance = bigDecimal.subtract(row.net, net).toString();
+        const newCPUBalance = bigDecimal.subtract(row.cpu, cpu).toString();
+
         if(bigDecimal.compareTo(newNetBalance, 0) !== 0 && bigDecimal.compareTo(newCPUBalance, 0) !== 0){
-            logger.debug(`Deleting delegation from ${from} to ${to}`);
             await indexer.dbPool?.query(sql`DELETE FROM delegations WHERE from_account = ${from} AND to_account = ${to}`);
         } else {
-            logger.debug(`Decrementing delegation from ${from} to ${to} => new cpu: ${newCPUBalance}, new net: ${newNetBalance}`);
             await indexer.dbPool?.query(sql`UPDATE delegations
                 SET cpu   = ${newCPUBalance},
                     net   = ${newNetBalance},
                     block = ${block}
-                WHERE from_account = ${from} AND to_account = ${to}
+                WHERE from_account = ${String(from)} AND to_account = ${String(to)}
             `);
         }
         await updateRexBalancesFromDelegation(token, indexer,  Name.from(from), block);
@@ -214,15 +217,18 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
     }
 }
 const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
+    logger.debug(`Incrementing or inserting delegation from ${from} to ${to}`);
+    const cpu = parseInt(cpuAmount.replace('.', ''));
+    const net = parseInt(netAmount.replace('.', ''));
     try {
         await indexer.dbPool?.query(sql`INSERT INTO delegations (from_account, to_account, cpu, net, block)
-                VALUES (${from}, ${to}, ${cpuAmount}, ${netAmount}, ${block})
+                VALUES (${String(from)}, ${String(to)}, ${String(cpu)}, ${String(net)}, ${block})
                 ON CONFLICT ON CONSTRAINT delegations_pkey
                     DO UPDATE
                     SET cpu   = COALESCE(EXCLUDED.cpu, 0) + COALESCE(delegations.cpu, 0),
                         net   = COALESCE(EXCLUDED.net, 0) + COALESCE(delegations.net, 0),
                         block = EXCLUDED.block
-                WHERE delegations.from_account = ${String(from)} AND delegations.to_account = ${to}
+                    WHERE delegations.from_account = ${String(from)} AND delegations.to_account = ${String(to)}
         `);
         await updateRexBalancesFromDelegation(token, indexer,  Name.from(from), block);
         logger.debug(`Incremented or inserted delegation from ${from} to ${to}`);
