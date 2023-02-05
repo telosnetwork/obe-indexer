@@ -95,7 +95,8 @@ export default class Api {
                 schemes: this.config.apiProtocols,
                 tags: [
                     {name: 'tokens', description: 'Token stats endpoints'},
-                    {name: 'voters', description: 'Voter stats endpoints'}
+                    {name: 'voters', description: 'Voter stats endpoints'},
+                    {name: 'producers', description: 'Producer stats endpoints'}
                 ]
             }
         })

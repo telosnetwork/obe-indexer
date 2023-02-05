@@ -37,7 +37,7 @@ type VotersResponse = Static<typeof votersResponseSchema>
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Params: VotersQueryParams, Reply: VotersResponse | ErrorResponseType, Querystring: PaginationQueryParams }>('/voters/:producer', {
         schema: {
-            tags: ['voters'],
+            tags: ['producers'],
             params: votersQueryParams,
             querystring: paginationQueryParams,
             response: {

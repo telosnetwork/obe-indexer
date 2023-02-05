@@ -45,7 +45,7 @@ type ProducersResponse = Static<typeof producerSnapshotResponseSchema>
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Querystring: ProducerSnapshotQuerystring, Reply: ProducersResponse | ErrorResponseType }>('/snapshot', {
         schema: {
-            tags: ['voters'],
+            tags: ['producers'],
             querystring: producerSnapshotQuerystring,
             response: {
                 200: producerSnapshotResponseSchema,
