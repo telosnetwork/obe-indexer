@@ -64,7 +64,14 @@ export default class Api {
 
         // TODO: configure this or just disable in production code
         //const opts = {interceptors};
-        const opts = {};
+        const opts = {
+            maximumPoolSize: this.config.dbMaximumPoolSize,
+            minimumPoolSize: 1,
+            connectionRetryLimit: this.config.dbConnectionRetries,
+            connectionTimeout: this.config.dbConnectionTimeout,
+            transactionRetryLimit: this.config.dbConnectionRetries,
+            idleTimeout: 30000,
+        };
 
         try {
             const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
@@ -83,12 +90,12 @@ export default class Api {
         await this.fastify.register(fastifySwagger, {
             swagger: {
                 info: {
-                    title: 'Telos OBE API',
-                    description: 'API for Telos Open Block Explorer',
-                    version: '1.0.0'
+                    title: `${this.config.displayNetworkName} Telos OBE API`,
+                    description: `API for ${this.config.displayNetworkName} Open Block Explorer`,
+                    version: `${this.config.apiVersion}`
                 },
                 externalDocs: {
-                    url: 'https://docs.telos.net',
+                    url: `${this.config.documentationUrl}`,
                     description: 'Find more info in our documentation'
                 },
                 host: `${this.config.apiHost}`,
