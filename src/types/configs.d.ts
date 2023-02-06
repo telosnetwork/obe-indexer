@@ -1,4 +1,7 @@
 export interface IndexerConfig {
+    mode: string
+    indexerLogLevel: string
+    apiLogLevel: string
     apiAddress: string
     apiPort: number
     apiHost: string

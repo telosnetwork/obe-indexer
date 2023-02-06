@@ -3,6 +3,8 @@ import {FastifyInstance, FastifyReply, FastifyRequest, FastifyServerOptions} fro
 import {sql} from "slonik";
 import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply, paginationQueryParams } from "../../../util/utils";
+import {IndexerConfig} from "../../../types/configs";
+const config: IndexerConfig = require("../../../../config.json") as IndexerConfig;
 
 const holdersPathParams = Type.Object({
     contract: Type.String({
@@ -27,15 +29,15 @@ const holdersRow = Type.Object({
     }),
     liquid_balance: Type.Optional(Type.String({
         example: '123456789.0123456789',
-        description: '(TLOS only) A string representation of liquid balance, possibly too large for a Number type, use a big number library to consume it as a number'
+        description: `(${config.baseCurrencySymbol} only) A string representation of liquid balance, possibly too large for a Number type, use a big number library to consume it as a number`
     })),
     rex_stake: Type.Optional(Type.String({
         example: '123456789.0123456789',
-        description: '(TLOS only) A string representation of rex stake, possibly too large for a Number type, use a big number library to consume it as a number'
+        description: `(${config.baseCurrencySymbol} only) A string representation of rex stake, possibly too large for a Number type, use a big number library to consume it as a number`
     })),
     resource_stake: Type.Optional(Type.String({
         example: '123456789.0123456789',
-        description: '(TLOS only) A string representation of resource stake, possibly too large for a Number type, use a big number library to consume it as a number'
+        description: `(${config.baseCurrencySymbol} only) A string representation of resource stake, possibly too large for a Number type, use a big number library to consume it as a number`
     })),
 })
 type HoldersRow = Static<typeof holdersRow>
@@ -89,7 +91,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             totalSupply: String(token.supply).split(' ')[0],
             holders: holders.rows.map((balanceRow): HoldersRow => {
                 // TODO: Load base currency from config
-                if(id === "eosio.token:TLOS"){
+                if(id === `${config.baseCurrencyContract}:${config.baseCurrencySymbol}`){
                     return {
                         account: String(balanceRow.account),
                         total_balance: balanceToDecimals(String(balanceRow.total_balance || 0), decimals),

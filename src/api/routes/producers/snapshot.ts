@@ -15,19 +15,23 @@ const producerSnapshot = Type.Any()
 const producerSnapshot = Type.Object({
     // TODO: Figure out how to specify that the keys of this object can be anything
     producers: Type.Object({
-        account: Type.String({
-            example: 'accountname',
-            description: 'Producer account name'
-        }),
-        rank: Type.Number({
+        rank: Type.Optional(Type.Number({
             example: 1,
             description: 'Producer rank'
-        }),
-        total_votes: Type.String({
+        })),
+        active: Type.Optional(Type.Boolean({
+            example: true,
+            description: 'Active flag'
+        })),
+        account: Type.Optional(Type.String({
+            example: 'accountname',
+            description: 'Producer account name'
+        })),
+        total_votes: Type.Optional(Type.String({
             example: '123456789.0123456789',
             description: 'A string representation of total vote weight, possibly too large for a Number type, use a big number library to consume it as a number'
-        }),
-    })
+        })),
+    }, { additionalProperties: true })
 })
 */
 
