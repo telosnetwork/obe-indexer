@@ -149,7 +149,7 @@ export const getTableLastBlock = async (table: string, indexer: Indexer) => {
     try {
         const row = await indexer.dbPool?.maybeOne(
             sql`SELECT MAX(block) as block
-                from delegations`
+                from ${table}`
         );
         if (row) {
             return row.block as number
