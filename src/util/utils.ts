@@ -104,15 +104,12 @@ export const  getActions = async (indexer: Indexer, poller: string, params: any,
         return;
     }
     try {
-        let count = 0;
         logger.debug(`Handling ${params.filter} action...`);
         const response = await indexer.hyperion.get(`v2/history/get_actions`, { params });
         logger.info(`Received ${response.data.simple_actions.length} ${params.filter} action(s) for ${poller} poller`);
-        for (const action of response.data.simple_actions) {
+        for (const [i, action] of response.data.simple_actions) {
             try {
-                await callback(count, action);
-                count++;
-                lastBlock = (lastBlock) ? action.block : 0;
+                await callback(i, action);
             } catch (e) {
                 logger.error(`Failure doing ${params.filter} action callback for ${poller} poller: ${e}`);
             }
