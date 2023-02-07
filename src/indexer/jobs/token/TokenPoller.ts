@@ -322,8 +322,7 @@ export default class TokenPoller {
             before: endISO,
             code: token.account,
             table: 'accounts',
-            sort: 'asc',
-            limit: this.indexer.config.hyperionIncrementLimit
+            sort: 'asc'
         };
         try {
             const response = await this.indexer.hyperion.get(`v2/history/get_deltas`, {params});

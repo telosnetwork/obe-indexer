@@ -172,7 +172,6 @@ const handleDelegationAction = async (actionName: any, token: Token, startISO: s
             sort: 'asc',
             filter: actionName,
             simple: true,
-            limit: indexer.config.hyperionIncrementLimit,
         }, currentBlock, async (index: number, action: any) => {
             const data = action.data;
             const from = action.data.from.toString();
@@ -285,7 +284,6 @@ const handleRexBalancesAction = async (action: any, token: Token, startISO: stri
             sort: 'asc',
             filter: action,
             simple: true,
-            limit: indexer.config.hyperionIncrementLimit,
         }, currentBlock, async (index: number, action: any) => {
             let count = 0;
             let account = Name.from(action.data.from);

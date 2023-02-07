@@ -31,7 +31,6 @@ export interface IndexerConfig {
     rexPollInterval: number
     voterPollInterval: number
     bpPollInterval: number
-    hyperionIncrementLimit: number
 }
 
 export interface RetryFetchOpts {

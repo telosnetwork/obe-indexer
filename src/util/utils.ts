@@ -112,10 +112,7 @@ export const  getActions = async (indexer: Indexer, poller: string, params: any,
             try {
                 await callback(count, action);
                 count++;
-                // If last iteration and there might be more (limit reached) overwrite last block
-                if(lastBlock && count >= indexer.config.hyperionIncrementLimit){
-                    lastBlock = action.block;
-                }
+                lastBlock = action.block;
             } catch (e) {
                 logger.error(`Failure doing ${params.filter} action callback for ${poller} poller: ${e}`);
             }
@@ -153,10 +150,7 @@ export const paginateTableQuery = async (api: APIClient, query: any, callback: F
 
 export const getTableLastBlock = async (table: string, indexer: Indexer) => {
     try {
-        const row = await indexer.dbPool?.maybeOne(
-            sql`SELECT MAX(block) as block
-                from ${table}`
-        );
+        const row = await indexer.dbPool?.maybeOne(sql`SELECT MAX(block) as block FROM ${sql.identifier([table])}`);
         if (row) {
             return row.block as number
         }

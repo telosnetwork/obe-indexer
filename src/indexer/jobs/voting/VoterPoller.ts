@@ -215,7 +215,7 @@ export default class VoterPoller {
             logger.error(`Failure doing voters table query: ${e}`)
         }
 
-        this.setLastVoterFromBlock(currentLibBlock)
+        await this.setLastVoterFromBlock(currentLibBlock)
         logger.info(`Done with full load of voters`)
     }
     private async getVoterWeight(voter: string) {
@@ -275,20 +275,17 @@ export default class VoterPoller {
             sort: 'asc',
             filter: 'eosio:voteproducer',
             simple: true,
-            limit: this.indexer.config.hyperionIncrementLimit,
         }, currentLibBlock, async (index: number, action: any) => {
             const data = action.data;
             data.last_vote_weight = await this.getVoterWeight(data.voter);
             data.owner = data.voter;
             await this.insertVoter(data, action.block);
-            if((index + 1) >= this.indexer.config.hyperionIncrementLimit){
-                lastBlock = action.block;
-            }
+            lastBlock = action.block;
         })
         await this.setLastVoterFromBlock(lastBlock);
         await this.handleStakeAction('eosio:buyrex', startISOBuy, endISO, currentLibBlock);
         await this.handleStakeAction('eosio:sellrex', startISOSell, endISO, currentLibBlock);
-        this.voters = []; // Clear cache of voters
+        this.voters = []; // Clear local cache of voters
         logger.info(`Done with one incremental load of voters`);
     }
 
@@ -301,7 +298,6 @@ export default class VoterPoller {
             sort: 'asc',
             filter: actionName,
             simple: true,
-            limit: this.indexer.config.hyperionIncrementLimit,
         }, currentBlock, async (index: number, action: any) => {;
             let data = action.data;
             logger.debug(`Retreived one ${actionName} action from ${data.from} at block ${action.block}`);
@@ -312,9 +308,7 @@ export default class VoterPoller {
             } catch (e) {
                 logger.error(`Failure updating voters table: ${e}`)
             }
-            if((index + 1) >= this.indexer.config.hyperionIncrementLimit){
-                lastBlock = action.block;
-            }
+            lastBlock = action.block;
         });
         await this.setLastVoterFromBlock(lastBlock);
     }
@@ -340,11 +334,7 @@ export default class VoterPoller {
         }
 
         producers.sort((a: Producer, b: Producer) => {
-            if (a.totalVotes > b.totalVotes) {
-                return -1
-            }
-
-            return 1
+            return (a.totalVotes > b.totalVotes) ? -1 : 1
         })
 
         let rank = 1
