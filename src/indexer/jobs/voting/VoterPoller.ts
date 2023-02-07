@@ -262,9 +262,9 @@ export default class VoterPoller {
         logger.info(`Starting incremental load of voters`);
 
         // We get last block saved for each action (or last voter table block if not set yet) so that if the limit we set makes one action way ahead of others (ie: one had lots of calls, the other only a few) we can still recover after crash
-        const startISOProducer = await getLastActionBlockISO('eosio:voteproducer', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock)
-        const startISOBuy = await getLastActionBlockISO('eosio:buyrex', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock)
-        const startISOSell = await getLastActionBlockISO('eosio:sellrex', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock);
+        const startISOProducer = await getLastActionBlockISO('eosio:voteproducer', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock, 1)
+        const startISOBuy = await getLastActionBlockISO('eosio:buyrex', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock, 1)
+        const startISOSell = await getLastActionBlockISO('eosio:sellrex', POLLER_ID, this.indexer, this.chainApi, this.lastVoterBlock, 1);
         const endBlockResponse = await this.chainApi.get_block(currentLibBlock)
         const endISO = new Date(endBlockResponse.timestamp.toMilliseconds()).toISOString();
         logger.info(`Querying hyperion actions for eosio:voteproducer between ${startISOProducer.toString()} & ${endISO.toString()}`)

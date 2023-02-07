@@ -5,7 +5,9 @@ import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
 
 const producerSnapshotQuerystring = Type.Object({
-    hoursAgo: Type.String()
+    hoursAgo: Type.String({
+        description: "Get last snapshot saved before"
+    })
 })
 
 type ProducerSnapshotQuerystring = Static<typeof producerSnapshotQuerystring>

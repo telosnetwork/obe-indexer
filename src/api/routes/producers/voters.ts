@@ -6,7 +6,9 @@ import {balanceToDecimals, decimalsFromSupply, paginationQueryParams} from "../.
 import { z } from "zod";
 
 const votersQueryParams = Type.Object({
-    producer: Type.String()
+    producer: Type.String({
+        description: 'Producer account name'
+    })
 })
 
 type VotersQueryParams = Static<typeof votersQueryParams>

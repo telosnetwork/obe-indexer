@@ -93,8 +93,8 @@ const getRexPrice = async (indexer: Indexer) => {
  *
  */
 export const loadDelegatedIncremental = async (token: Token, currentBlock: number, lastBlock: number, poller: string, indexer: Indexer, chainApi: ChainAPI) => {
-    const startDelegateISO = await getLastActionBlockISO('eosio:delegatebw', poller, indexer, chainApi, lastBlock);
-    const startUndelegateISO = await getLastActionBlockISO('eosio:undelegatebw', poller, indexer, chainApi, lastBlock);
+    const startDelegateISO = await getLastActionBlockISO('eosio:delegatebw', poller, indexer, chainApi, lastBlock, 1);
+    const startUndelegateISO = await getLastActionBlockISO('eosio:undelegatebw', poller, indexer, chainApi, lastBlock, 1);
     const endISO = await getBlockISO(currentBlock, indexer);
     await handleDelegationAction('eosio:delegatebw', token, startDelegateISO, endISO, currentBlock, poller, indexer)
     await handleDelegationAction('eosio:undelegatebw', token, startUndelegateISO, endISO, currentBlock, poller, indexer)
@@ -217,8 +217,8 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
 }
 const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
     logger.debug(`Incrementing or inserting delegation from ${from} to ${to}`);
-    const cpu = toWei(cpuAmount, 4);
-    const net =  toWei(netAmount, 4);
+    const cpu = toWei(cpuAmount, indexer.config.baseCurrencyDecimals);
+    const net =  toWei(netAmount, indexer.config.baseCurrencyDecimals);
     try {
         await indexer.dbPool?.query(sql`INSERT INTO delegations (from_account, to_account, cpu, net, block)
                 VALUES (${String(from)}, ${String(to)}, ${String(cpu)}, ${String(net)}, ${block})
@@ -241,8 +241,8 @@ const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: 
  *
  */
 export const loadRexBalancesIncremental = async (token: Token, currentBlock: number, lastBlock: number, poller: string, indexer: Indexer, chainAPI: ChainAPI) => {
-    const startBuyISO = await getLastActionBlockISO('eosio:buyrex', poller, indexer, chainAPI, lastBlock);
-    const startSellISO = await getLastActionBlockISO('eosio:sellrex', poller, indexer, chainAPI, lastBlock);
+    const startBuyISO = await getLastActionBlockISO('eosio:buyrex', poller, indexer, chainAPI, lastBlock, 1);
+    const startSellISO = await getLastActionBlockISO('eosio:sellrex', poller, indexer, chainAPI, lastBlock, 1);
     const endISO = await getBlockISO(currentBlock, indexer);
     await handleRexBalancesAction('eosio:buyrex', token, startBuyISO, endISO, currentBlock, poller, indexer);
     await handleRexBalancesAction('eosio:sellrex', token, startSellISO, endISO, currentBlock, poller, indexer);

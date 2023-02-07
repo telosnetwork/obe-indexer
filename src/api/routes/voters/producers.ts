@@ -6,7 +6,9 @@ import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
 import { z } from "zod";
 
 const voterQueryParams = Type.Object({
-    voter: Type.String()
+    voter: Type.String({
+        description: 'Voter account name'
+    })
 })
 
 type VoterQueryParams = Static<typeof voterQueryParams>

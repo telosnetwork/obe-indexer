@@ -65,9 +65,9 @@ export const setLastActionBlock = async (action: string, poller: string, block: 
     }
     return;
 }
-export const getLastActionBlockISO = async (action: string, poller: string, indexer: Indexer, chainAPI: ChainAPI, fallbackBlock: number): Promise<string> => {
+export const getLastActionBlockISO = async (action: string, poller: string, indexer: Indexer, chainAPI: ChainAPI, fallbackBlock: number, offset: number): Promise<string> => {
     const lastActionBlock = await getLastActionBlock(action, poller, indexer);
-    const block = lastActionBlock || fallbackBlock;
+    const block = (lastActionBlock || fallbackBlock) + offset;
     try {
         const response = await chainAPI.get_block(block);
         return new Date(response.timestamp.toMilliseconds()).toISOString();
@@ -112,7 +112,7 @@ export const  getActions = async (indexer: Indexer, poller: string, params: any,
             try {
                 await callback(count, action);
                 count++;
-                lastBlock = action.block;
+                lastBlock = (lastBlock) ? action.block : 0;
             } catch (e) {
                 logger.error(`Failure doing ${params.filter} action callback for ${poller} poller: ${e}`);
             }
@@ -173,9 +173,9 @@ export const sleep = (ms: number) => {
 
 export const paginationQueryParams = Type.Object({
     limit: Type.Optional(Type.Number({
-        description: 'Maximum number of results to retreive (max: 500)',
+        description: 'Maximum number of results to retreive (max: 1000)',
         default: 100,
-        maximum: 500
+        maximum: 1000
     })),
     offset: Type.Optional(Type.Number({
         description: 'Offsets results for pagination (skips first X)',
