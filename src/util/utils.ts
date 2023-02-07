@@ -65,9 +65,9 @@ export const setLastActionBlock = async (action: string, poller: string, block: 
     }
     return;
 }
-export const getLastActionBlockISO = async (action: string, poller: string, indexer: Indexer, chainAPI: ChainAPI, fallbackBlock: number, offset: number): Promise<string> => {
+export const getLastActionBlockISO = async (action: string, poller: string, indexer: Indexer, chainAPI: ChainAPI, fallbackBlock: number): Promise<string> => {
     const lastActionBlock = await getLastActionBlock(action, poller, indexer);
-    const block = (lastActionBlock || fallbackBlock) + offset;
+    const block = lastActionBlock || fallbackBlock;
     try {
         const response = await chainAPI.get_block(block);
         return new Date(response.timestamp.toMilliseconds()).toISOString();

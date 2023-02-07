@@ -93,8 +93,8 @@ const getRexPrice = async (indexer: Indexer) => {
  *
  */
 export const loadDelegatedIncremental = async (token: Token, currentBlock: number, lastBlock: number, poller: string, indexer: Indexer, chainApi: ChainAPI) => {
-    const startDelegateISO = await getLastActionBlockISO('eosio:delegatebw', poller, indexer, chainApi, lastBlock, 1);
-    const startUndelegateISO = await getLastActionBlockISO('eosio:undelegatebw', poller, indexer, chainApi, lastBlock, 1);
+    const startDelegateISO = await getLastActionBlockISO('eosio:delegatebw', poller, indexer, chainApi, lastBlock);
+    const startUndelegateISO = await getLastActionBlockISO('eosio:undelegatebw', poller, indexer, chainApi, lastBlock);
     const endISO = await getBlockISO(currentBlock, indexer);
     await handleDelegationAction('eosio:delegatebw', token, startDelegateISO, endISO, currentBlock, poller, indexer)
     await handleDelegationAction('eosio:undelegatebw', token, startUndelegateISO, endISO, currentBlock, poller, indexer)
@@ -241,8 +241,8 @@ const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: 
  *
  */
 export const loadRexBalancesIncremental = async (token: Token, currentBlock: number, lastBlock: number, poller: string, indexer: Indexer, chainAPI: ChainAPI) => {
-    const startBuyISO = await getLastActionBlockISO('eosio:buyrex', poller, indexer, chainAPI, lastBlock, 1);
-    const startSellISO = await getLastActionBlockISO('eosio:sellrex', poller, indexer, chainAPI, lastBlock, 1);
+    const startBuyISO = await getLastActionBlockISO('eosio:buyrex', poller, indexer, chainAPI, lastBlock);
+    const startSellISO = await getLastActionBlockISO('eosio:sellrex', poller, indexer, chainAPI, lastBlock);
     const endISO = await getBlockISO(currentBlock, indexer);
     await handleRexBalancesAction('eosio:buyrex', token, startBuyISO, endISO, currentBlock, poller, indexer);
     await handleRexBalancesAction('eosio:sellrex', token, startSellISO, endISO, currentBlock, poller, indexer);
