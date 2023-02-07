@@ -3,6 +3,7 @@ import {FastifyInstance, FastifyReply, FastifyRequest, FastifyServerOptions} fro
 import {sql} from "slonik";
 import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply, paginationQueryParams} from "../../../util/utils";
+import { z } from "zod";
 
 const votersQueryParams = Type.Object({
     producer: Type.String()
@@ -12,7 +13,7 @@ type VotersQueryParams = Static<typeof votersQueryParams>
 type PaginationQueryParams = Static<typeof paginationQueryParams>
 
 const votersRow = Type.Object({
-    account: Type.String({
+    voter: Type.String({
         example: 'accountname',
         description: 'Account name'
     }),
@@ -22,12 +23,18 @@ const votersRow = Type.Object({
     }),
 })
 
+const votersQueryRow = z.object({
+    voter: z.string(),
+    vote_weight: z.string(),
+})
+type VotersQueryRow = z.infer<typeof votersQueryRow>;
+
 type VotersRow = Static<typeof votersRow>
 
 const votersResponseSchema = Type.Object({
-    totalVoters: Type.Number({
+    totalVoters: Type.String({
         example: '112',
-        description: 'The total count of voters for this producer'
+        description: 'A string representation of the total count of voters for this producer, possibly too large for a Number type, use a big number library to consume it as a number'
     }),
     voters: Type.Array(votersRow)
 })
@@ -46,17 +53,17 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             }
         }
     }, async (request, reply) => {
-        // TODO: Typecast the row results so we don't need to String(everything)
         const limit = request.query.limit || 100;
         const offset = request.query.offset || 0;
-        const voters = await fastify.dbPool.query(sql`SELECT * FROM voters WHERE ${request.params.producer}=ANY(producers) ORDER BY vote_weight DESC LIMIT ${limit} OFFSET ${offset}`)
+        const query = sql.type(votersQueryRow)`SELECT voter, vote_weight FROM voters WHERE ${request.params.producer}=ANY(producers) ORDER BY vote_weight DESC LIMIT ${limit} OFFSET ${offset}`;
+        const voters = await fastify.dbPool.any(query)
         const votersCount = await fastify.dbPool.maybeOne(sql`SELECT COUNT(*) as count FROM voters WHERE ${request.params.producer}=ANY(producers)`)
         const votersResponse: VotersResponse = {
-            totalVoters: (votersCount) ? votersCount.count as number : 0,
-            voters: voters.rows.map((row): VotersRow => {
+            totalVoters: (votersCount) ? votersCount.count as string : '0',
+            voters: voters.map((row: VotersQueryRow): VotersRow => {
                 return {
-                    account: String(row.voter),
-                    vote_weight: (parseInt(String(row.vote_weight)) / 10000).toFixed(4)
+                    voter: row.voter,
+                    vote_weight: (parseInt(row.vote_weight) / 10000).toFixed(4)
                 }
             })
         }

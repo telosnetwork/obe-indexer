@@ -53,22 +53,25 @@ export default class Indexer {
 
     private async createDbPool() {
         const {dbHost, dbName, dbUser, dbPass, dbPort} = this.config;
-        const interceptors = [
-            createQueryLoggingInterceptor()
-        ];
 
-        // TODO: configure this or just disable in production code
-        // const opts = {interceptors};
-        logger.debug(`Creating db pool with max pool size: ${this.config.dbMaximumPoolSize} & retries limit: ${this.config.dbConnectionRetries}`);
-        const opts = {
-             maximumPoolSize: this.config.dbMaximumPoolSize,
-             minimumPoolSize: 1,
-             connectionRetryLimit: this.config.dbConnectionRetries,
-             connectionTimeout: this.config.dbConnectionTimeout,
-             transactionRetryLimit: this.config.dbConnectionRetries,
-             idleTimeout: 30000,
-        };
-
+        let opts;
+        if(this.config.mode === 'dev'){
+            logger.debug(`Creating db pool with query logging interceptors...`);
+            const interceptors = [
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                createQueryLoggingInterceptor()
+            ];
+            opts = {interceptors};
+        } else {
+            logger.debug(`Creating db pool with max pool size: ${this.config.dbMaximumPoolSize} & retries limit: ${this.config.dbConnectionRetries}...`);
+            opts = {
+                maximumPoolSize: this.config.dbMaximumPoolSize,
+                connectionRetryLimit: this.config.dbConnectionRetries,
+                connectionTimeout: this.config.dbConnectionTimeout,
+                transactionRetryLimit: this.config.dbConnectionRetries,
+                idleTimeout: 30000,
+            };
+        }
         try {
             const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
             this.dbPool = await createPool(connectionString, opts);

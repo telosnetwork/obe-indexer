@@ -3,6 +3,9 @@ import {FastifyInstance, FastifyReply, FastifyRequest, FastifyServerOptions} fro
 import {sql} from "slonik";
 import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
+import {IndexerConfig} from "../../../types/configs";
+const config: IndexerConfig = require("../../../../config.json") as IndexerConfig;
+import { z } from "zod";
 
 const delegationsQueryString = Type.Object({
     from: Type.Optional(Type.String({
@@ -23,6 +26,14 @@ const delegationsQueryString = Type.Object({
 })
 
 type DelegationsQueryString = Static<typeof delegationsQueryString>
+
+const delegationQueryRow = z.object({
+    from_account: z.string(),
+    to_account: z.string(),
+    cpu: z.string(),
+    net: z.string(),
+})
+type DelegationQueryRow = z.infer<typeof delegationQueryRow>;
 
 const delegationRow = Type.Object({
     from: Type.String({
@@ -83,17 +94,15 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             components.push(sql`from_account =
             ${from}`)
         }
-
-        const delegationsResult = await fastify.dbPool.query(sql`SELECT *
-                                                                 FROM delegations
-                                                                 WHERE ${sql.join(components, sql` AND `)} LIMIT ${limit} OFFSET ${offset}`)
+        const query = sql.type(delegationQueryRow)`SELECT from_account, to_account, cpu, net FROM delegations WHERE ${sql.join(components, sql` AND `)} LIMIT ${limit} OFFSET ${offset}`;
+        const delegationsResult = await fastify.dbPool.any(query)
         const delegationsResponse: DelegationsResponse = {
-            delegations: delegationsResult.rows.map((row): DelegationRow => {
+            delegations: delegationsResult.map((row: DelegationQueryRow): DelegationRow => {
                 return {
-                    from: String(row.from_account),
-                    to: String(row.to_account),
-                    cpu: balanceToDecimals(String(row.cpu), 4),
-                    net: balanceToDecimals(String(row.net), 4)
+                    from: row.from_account,
+                    to: row.to_account,
+                    cpu: balanceToDecimals(row.cpu, config.baseCurrencyDecimals),
+                    net: balanceToDecimals(row.net, config.baseCurrencyDecimals)
                 }
             })
         }

@@ -2,11 +2,16 @@ export interface IndexerConfig {
     mode: string
     indexerLogLevel: string
     apiLogLevel: string
+    apiVersion: string
+    networkName: string
+    displayNetworkName: string
+    documentationUrl: string
     apiAddress: string
     apiPort: number
     apiHost: string
     baseCurrencyContract: string
     baseCurrencySymbol: string
+    baseCurrencyDecimals: number
     apiProtocols: string[]
     tokenListUrl: string
     nodeosUrl: string

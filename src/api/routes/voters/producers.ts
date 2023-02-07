@@ -3,6 +3,7 @@ import {FastifyInstance, FastifyReply, FastifyRequest, FastifyServerOptions} fro
 import {sql} from "slonik";
 import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
+import { z } from "zod";
 
 const voterQueryParams = Type.Object({
     voter: Type.String()
@@ -16,6 +17,12 @@ const producerRow = Type.String({
 })
 
 type ProducerRow = Static<typeof producerRow>
+
+const voterQueryRow =  z.object({
+    producers: z.array(z.string()),
+    vote_weight: z.string()
+});
+type VoterQueryRow = z.infer<typeof voterQueryRow>
 
 const voterResponseSchema = Type.Object({
     vote_weight: Type.String({
@@ -42,7 +49,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             }
         }
     }, async (request, reply) => {
-        const voter = await fastify.dbPool.maybeOne(sql`SELECT producers, vote_weight FROM voters WHERE voter=${String(request.params.voter)} LIMIT 1`);
+        const voter = await fastify.dbPool.maybeOne(sql.type(voterQueryRow)`SELECT producers, vote_weight FROM voters WHERE voter=${String(request.params.voter)} LIMIT 1`);
         if(!voter){
             reply.code(404).send({'message': 'Voter not found', 'details' : `Voter ${request.params.voter} could not be found in the database, make sure the account name is correct` });
             return;
@@ -51,7 +58,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const voterResponse: VoterResponse = {
             producers: producers,
             producerCount: producers.length,
-            vote_weight: (parseInt(String(voter.vote_weight)) / 10000).toFixed(4)
+            vote_weight: (parseInt(voter.vote_weight) / 10000).toFixed(4)
         }
 
         reply.status(200).send(voterResponse)

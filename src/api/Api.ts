@@ -57,21 +57,24 @@ export default class Api {
 
     private async createDbPool() {
         const {dbHost, dbName, dbUser, dbPass, dbPort} = this.config;
-        const interceptors = [
+        let opts;
+        if(this.config.mode === 'dev'){
+            logger.debug(`Creating db pool with query logging interceptors...`);
+            const interceptors = [
             // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            createQueryLoggingInterceptor()
-        ];
-
-        // TODO: configure this or just disable in production code
-        //const opts = {interceptors};
-        const opts = {
-            maximumPoolSize: this.config.dbMaximumPoolSize,
-            minimumPoolSize: 1,
-            connectionRetryLimit: this.config.dbConnectionRetries,
-            connectionTimeout: this.config.dbConnectionTimeout,
-            transactionRetryLimit: this.config.dbConnectionRetries,
-            idleTimeout: 30000,
-        };
+                 createQueryLoggingInterceptor(),
+            ];
+            opts = {interceptors};
+        } else {
+            logger.debug(`Creating db pool with max pool size: ${this.config.dbMaximumPoolSize} & retries limit: ${this.config.dbConnectionRetries}...`);
+            opts = {
+                maximumPoolSize: this.config.dbMaximumPoolSize,
+                connectionRetryLimit: this.config.dbConnectionRetries,
+                connectionTimeout: this.config.dbConnectionTimeout,
+                transactionRetryLimit: this.config.dbConnectionRetries,
+                idleTimeout: 30000,
+            };
+        }
 
         try {
             const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
@@ -96,7 +99,7 @@ export default class Api {
                 },
                 externalDocs: {
                     url: `${this.config.documentationUrl}`,
-                    description: 'Find more info in our documentation'
+                    description: 'Find more information in our documentation'
                 },
                 host: `${this.config.apiHost}`,
                 schemes: this.config.apiProtocols,
