@@ -1,10 +1,27 @@
-// eslint-disable-next-line @typescript-eslint/no-var-requires,no-undef
-const slonik = require('slonik');
+import {
+    sql,
+    type DatabaseConnection
+} from 'slonik';
+var expect = require('chai').expect;
 
-(async () => {
-    const pool = await slonik.createPool('postgresql://obe:obe@localhost:5455/obe')
-    // eslint-disable-next-line no-undef
-    console.log('worked');
-    // eslint-disable-next-line no-undef
-    console.log(pool.getPoolState())
-})()
+describe('TokenHandler', function() {
+
+    // add a test hook
+    beforeEach(function() {
+        // ...some logic before each test is run
+
+    })
+
+    // test a functionality
+    it('should add increment or insert delegation', function() {
+        // add an assertion
+        expect(sum(1, 2, 3, 4, 5)).to.equal(15);
+    })
+
+    // test a functionality
+    it('should add decrement or delete delegation', function() {
+        // add an assertion
+        expect(sum(1, 2, 3, 4, 5)).to.equal(15);
+    })
+
+})

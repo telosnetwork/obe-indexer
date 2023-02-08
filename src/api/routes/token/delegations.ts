@@ -78,7 +78,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const from = request.query.from
         const to = request.query.to
         if (!from && !to) {
-            return reply.status(404).send({
+            reply.status(404).send({
                 message: `Missing to or from`,
                 details: `Must specify a to or a from account when querying for delegations`
             })
@@ -97,7 +97,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const query = sql.type(delegationQueryRow)`SELECT from_account, to_account, cpu, net FROM delegations WHERE ${sql.join(components, sql` AND `)} LIMIT ${limit} OFFSET ${offset}`;
         const delegationsResult = await fastify.dbPool.any(query);
         if(delegationsResult.length === 0){
-            return reply.status(404).send({
+            reply.status(404).send({
                 message: 'Unable to find any delegations',
                 details: `Unable to find any delegations for the account name specified`
             });

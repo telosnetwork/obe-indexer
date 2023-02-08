@@ -3,7 +3,7 @@ import {IndexerConfig} from "./types/configs";
 const config: IndexerConfig = require("../config.json") as IndexerConfig;
 import {createLogger} from "./util/logger";
 
-const logger = createLogger('Indexer launcher', 'indexer')
+const logger = createLogger('Indexer launcher')
 
 ;(async () => {
     logger.info("Starting indexer...");

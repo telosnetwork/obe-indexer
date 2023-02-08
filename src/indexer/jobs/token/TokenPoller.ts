@@ -17,7 +17,7 @@ export class StatRow extends Struct {
     @Struct.field(Asset) supply!: Asset
 }
 
-const logger = createLogger('TokenPoller', 'indexer');
+const logger = createLogger('TokenPoller');
 
 export const POLLER_ID = 'token';
 

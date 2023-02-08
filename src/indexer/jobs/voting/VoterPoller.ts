@@ -16,7 +16,7 @@ import {sql} from "slonik";
 import {createLogger} from "../../../util/logger";
 import {paginateTableQuery, getActions, getLastActionBlockISO, getLastActionsBlock, setLastActionBlock} from "../../../util/utils";
 
-const logger = createLogger('VoterPoller', 'indexer');
+const logger = createLogger('VoterPoller');
 
 export const POLLER_ID: string = 'voter';
 

@@ -4,7 +4,7 @@ import {Type } from '@sinclair/typebox'
 import {ChainAPI, APIClient} from "@greymass/eosio";
 import {createLogger} from "./logger";
 import Indexer from "../indexer/Indexer";
-const logger = createLogger('Common utils', 'indexer');
+const logger = createLogger('Common utils');
 import bigDecimal from "js-big-decimal";
 import {sql} from "slonik";
 

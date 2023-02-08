@@ -1,7 +1,6 @@
 export interface IndexerConfig {
     mode: string
-    indexerLogLevel: string
-    apiLogLevel: string
+    logLevel: string
     apiVersion: string
     networkName: string
     displayNetworkName: string

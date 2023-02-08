@@ -84,7 +84,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
 
         const tokens = await fastify.dbPool.any(sql.type(tokensQueryRow)`SELECT token, total_balance, liquid_balance, rex_stake, resource_stake, account FROM balances WHERE account = ${account} ORDER BY total_balance DESC LIMIT ${limit} OFFSET ${offset}`);
         if(tokens.length === 0){
-            return reply.status(404).send({
+            reply.status(404).send({
                 message: 'Unable to find any balances for that account name',
                 details: 'Unable to find any balances for that account name'
             });

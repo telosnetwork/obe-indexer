@@ -4,6 +4,7 @@ import axios, {AxiosInstance} from "axios";
 import axiosRetry from 'axios-retry';
 
 import {createPool, DatabasePool} from "slonik";
+import {createDbPool} from "../util/database";
 import {
     createQueryLoggingInterceptor
 } from 'slonik-interceptor-query-logging';
@@ -15,7 +16,7 @@ import VotePoller from "./jobs/voting/VoterPoller";
 import * as https from "https"
 
 const RUN_LOOP_SLEEP = 1000;
-const logger = createLogger('Indexer', 'indexer');
+const logger = createLogger('Indexer');
 
 export default class Indexer {
 
@@ -45,36 +46,15 @@ export default class Indexer {
 
     static async create(config: IndexerConfig) {
         const indexer: Indexer = new Indexer(config);
-        const created = await indexer.createDbPool();
-        if(!created) throw 'Could not create database pool, aborting...';
+        await indexer.createDbPool(config);
+        if(!indexer.dbPool) throw 'Could not create database pool, aborting...';
         return indexer;
     }
 
 
-    private async createDbPool() {
-        const {dbHost, dbName, dbUser, dbPass, dbPort} = this.config;
-
-        let opts;
-        if(this.config.mode === 'dev'){
-            logger.debug(`Creating db pool with query logging interceptors...`);
-            const interceptors = [
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-                createQueryLoggingInterceptor()
-            ];
-            opts = {interceptors};
-        } else {
-            logger.debug(`Creating db pool with max pool size: ${this.config.dbMaximumPoolSize} & retries limit: ${this.config.dbConnectionRetries}...`);
-            opts = {
-                maximumPoolSize: this.config.dbMaximumPoolSize,
-                connectionRetryLimit: this.config.dbConnectionRetries,
-                connectionTimeout: this.config.dbConnectionTimeout,
-                transactionRetryLimit: this.config.dbConnectionRetries,
-                idleTimeout: 30000,
-            };
-        }
+    private async createDbPool(config: IndexerConfig) {
         try {
-            const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
-            this.dbPool = await createPool(connectionString, opts);
+            this.dbPool = await createDbPool(config);
             return true;
         } catch (e) {
             logger.error(`Failed creating db pool: ${e}`);

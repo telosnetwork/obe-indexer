@@ -4,6 +4,7 @@
     "description": "Indexer for AntelopeIO Open Block Explorer",
     "main": "index.js",
     "scripts": {
+        "test": "mocha",
         "lint": "eslint . --ext .ts",
         "lint:fix": "eslint --fix --ext .ts, src",
         "build": "rm -rf dist && tsc --build"

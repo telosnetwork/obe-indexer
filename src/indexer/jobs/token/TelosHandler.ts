@@ -7,7 +7,7 @@ import bigDecimal from "js-big-decimal";
 import {createLogger} from "../../../util/logger";
 import {getBlockISO, toWei} from "../../../util/utils";
 
-const logger = createLogger('TelosHandler', 'indexer')
+const logger = createLogger('TelosHandler')
 
 @Struct.type('pair_time_point_sec_int64')
 export class PairTimePointSecInt64 extends Struct {
