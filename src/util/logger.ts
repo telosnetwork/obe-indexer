@@ -1,8 +1,11 @@
 import { pino } from 'pino'
-const devMode = process.env.MODE == 'dev'
+import 'dotenv/config';
+import {IndexerConfig} from "../types/configs";
+const config: IndexerConfig = require("../../config.json") as IndexerConfig;
 
 export function createLogger(source: string) {
-    const logLevel = process.env.API_LOG_LEVEL || 'info'
+    const logLevel = config.logLevel || 'info';
+    const devMode = (config.mode && config.mode === 'dev');
     console.log(`Creating logger for ${source} ${devMode ? ' in dev mode ' : ''} with level ${logLevel}`)
     const options = {
         level: logLevel,

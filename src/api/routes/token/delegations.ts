@@ -3,21 +3,39 @@ import {FastifyInstance, FastifyReply, FastifyRequest, FastifyServerOptions} fro
 import {sql} from "slonik";
 import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
+import {IndexerConfig} from "../../../types/configs";
+const config: IndexerConfig = require("../../../../config.json") as IndexerConfig;
+import { z } from "zod";
 
 const delegationsQueryString = Type.Object({
     from: Type.Optional(Type.String({
-        examples: ['delegatooorr'],
         description: 'Account name for the account that has delegated staked resources',
     })),
     to: Type.Optional(Type.String({
-        examples: ['delegateeee'],
         description: 'Account name for the account that has received the staked resources'
     })),
+    limit: Type.Optional(Type.Number({
+        description: 'Maximum number of results to retreive (max: 500)',
+        default: 100,
+        maximum: 500
+    })),
+    offset: Type.Optional(Type.Number({
+        description: 'Offsets results for pagination (skips first X)',
+        default: 0
+    }))
 })
 
 type DelegationsQueryString = Static<typeof delegationsQueryString>
 
-const delegationRow = Type.Object({
+const delegationQueryRow = z.object({
+    from_account: z.string(),
+    to_account: z.string(),
+    cpu: z.string(),
+    net: z.string(),
+})
+type DelegationQueryRow = z.infer<typeof delegationQueryRow>;
+
+const delegationResponseRow = Type.Object({
     from: Type.String({
         example: 'delegatooorr',
         description: 'Account name for the account that has delegated staked resources'
@@ -36,13 +54,13 @@ const delegationRow = Type.Object({
     }),
 })
 
-type DelegationRow = Static<typeof delegationRow>
+type DelegationResponseRow = Static<typeof delegationResponseRow>
 
-const deletagionsResponseSchema = Type.Object({
-    delegations: Type.Array(delegationRow)
+const delegationsResponse = Type.Object({
+    delegations: Type.Array(delegationResponseRow)
 })
 
-type DelegationsResponse = Static<typeof deletagionsResponseSchema>
+type DelegationsResponse = Static<typeof delegationsResponse>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Querystring: DelegationsQueryString, Reply: DelegationsResponse | ErrorResponseType }>('/delegations', {
@@ -50,11 +68,13 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             tags: ['tokens'],
             querystring: delegationsQueryString,
             response: {
-                200: deletagionsResponseSchema,
+                200: delegationsResponse,
                 404: errorResponse
             }
         }
     }, async (request, reply) => {
+        const limit = request.query.limit || 100;
+        const offset = request.query.offset || 0;
         const from = request.query.from
         const to = request.query.to
         if (!from && !to) {
@@ -74,17 +94,21 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             components.push(sql`from_account =
             ${from}`)
         }
-
-        const delegationsResult = await fastify.dbPool.query(sql`SELECT *
-                                                                 FROM delegations
-                                                                 WHERE ${sql.join(components, sql` AND `)}`)
+        const query = sql.type(delegationQueryRow)`SELECT from_account, to_account, cpu, net FROM delegations WHERE ${sql.join(components, sql` AND `)} LIMIT ${limit} OFFSET ${offset}`;
+        const delegationsResult = await fastify.dbPool.any(query);
+        if(delegationsResult.length === 0){
+            reply.status(404).send({
+                message: 'Unable to find any delegations',
+                details: `Unable to find any delegations for the account name specified`
+            });
+        }
         const delegationsResponse: DelegationsResponse = {
-            delegations: delegationsResult.rows.map((row): DelegationRow => {
+            delegations: delegationsResult.map((row: DelegationQueryRow): DelegationResponseRow => {
                 return {
-                    from: String(row.from_account),
-                    to: String(row.to_account),
-                    cpu: balanceToDecimals(String(row.cpu), 4),
-                    net: balanceToDecimals(String(row.net), 4)
+                    from: row.from_account,
+                    to: row.to_account,
+                    cpu: balanceToDecimals(row.cpu, config.baseCurrencyDecimals),
+                    net: balanceToDecimals(row.net, config.baseCurrencyDecimals)
                 }
             })
         }

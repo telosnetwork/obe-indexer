@@ -10,8 +10,7 @@ import fastifyAutoLoad from '@fastify/autoload'
 import path from 'path'
 
 import {createLogger} from "../util/logger";
-import {createQueryLoggingInterceptor} from "slonik-interceptor-query-logging";
-import {createPool} from "slonik";
+import {createDbPool} from "../util/database";
 
 const logger = createLogger('Api')
 
@@ -33,8 +32,9 @@ export default class Api {
         }).withTypeProvider<TypeBoxTypeProvider>()
     }
 
-     async run() {
-        await this.createDbPool()
+    async run() {
+        const dbPool = await createDbPool(this.config);
+        this.fastify.decorate(`dbPool`, dbPool);
         await this.registerPlugins()
         await this.registerRoutes()
         await this.fastify.ready(err => {
@@ -55,26 +55,6 @@ export default class Api {
         })
     }
 
-    private async createDbPool() {
-        const {dbHost, dbName, dbUser, dbPass, dbPort} = this.config;
-        const interceptors = [
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            createQueryLoggingInterceptor()
-        ];
-
-        // TODO: configure this or just disable in production code
-        //const opts = {interceptors};
-        const opts = {};
-
-        try {
-            const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
-            const dbPool = await createPool(connectionString, opts);
-            this.fastify.decorate(`dbPool`, dbPool);
-        } catch (e) {
-            logger.error(`Failed creating db pool`, e);
-        }
-    }
-
     private async registerPlugins() {
         await this.fastify.register(fastifyCors)
         this.fastify.register(fastifyTraps, {
@@ -83,19 +63,20 @@ export default class Api {
         await this.fastify.register(fastifySwagger, {
             swagger: {
                 info: {
-                    title: 'Telos Native Stats',
-                    description: 'Telos Native Stats APIs',
-                    version: '0.1.0'
+                    title: `${this.config.displayNetworkName} Telos OBE API`,
+                    description: `API for ${this.config.displayNetworkName} Open Block Explorer`,
+                    version: `${this.config.apiVersion}`
                 },
                 externalDocs: {
-                    url: 'https://docs.telos.net',
-                    description: 'Find more info here'
+                    url: `${this.config.documentationUrl}`,
+                    description: 'Find more information in our documentation'
                 },
                 host: `${this.config.apiHost}`,
                 schemes: this.config.apiProtocols,
                 tags: [
-                    {name: 'chain', description: 'Chain statistics endpoints'},
-                    {name: 'tokens', description: 'Token stats endpoints'}
+                    {name: 'tokens', description: 'Token stats endpoints'},
+                    {name: 'voters', description: 'Voter stats endpoints'},
+                    {name: 'producers', description: 'Producer stats endpoints'}
                 ]
             }
         })

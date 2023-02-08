@@ -5,50 +5,54 @@ import {errorResponse, ErrorResponseType} from "../../schemas/errorResponse";
 import {balanceToDecimals, decimalsFromSupply} from "../../../util/utils";
 
 const producerSnapshotQuerystring = Type.Object({
-    hoursAgo: Type.String()
+    hoursAgo: Type.String({
+        description: "Get last snapshot saved before"
+    })
 })
 
 type ProducerSnapshotQuerystring = Static<typeof producerSnapshotQuerystring>
 
-const producerSnapshot = Type.Any()
+const snapshotResponseRow = Type.Any()
 /*
-const producerSnapshot = Type.Object({
+const snapshotResponseRow = Type.Object({
     // TODO: Figure out how to specify that the keys of this object can be anything
     producers: Type.Object({
-        account: Type.String({
-            example: 'accountname',
-            description: 'Producer account name'
-        }),
-        rank: Type.Number({
+        rank: Type.Optional(Type.Number({
             example: 1,
             description: 'Producer rank'
-        }),
-        total_votes: Type.String({
+        })),
+        active: Type.Optional(Type.Boolean({
+            example: true,
+            description: 'Active flag'
+        })),
+        account: Type.Optional(Type.String({
+            example: 'accountname',
+            description: 'Producer account name'
+        })),
+        total_votes: Type.Optional(Type.String({
             example: '123456789.0123456789',
             description: 'A string representation of total vote weight, possibly too large for a Number type, use a big number library to consume it as a number'
-        }),
-    })
+        })),
+    }, { additionalProperties: true })
 })
 */
 
-type ProducerSnapshot = Static<typeof producerSnapshot>
-
-const producerSnapshotResponseSchema = Type.Object({
-    producers: producerSnapshot,
+const snapshotResponse = Type.Object({
+    producers: snapshotResponseRow,
     date: Type.Number({
         description: 'Datetime as epoch this snapshot was taken'
     })
 })
 
-type ProducersResponse = Static<typeof producerSnapshotResponseSchema>
+type SnapshotResponse = Static<typeof snapshotResponse>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
-    fastify.get<{ Querystring: ProducerSnapshotQuerystring, Reply: ProducersResponse | ErrorResponseType }>('/snapshot', {
+    fastify.get<{ Querystring: ProducerSnapshotQuerystring, Reply: SnapshotResponse | ErrorResponseType }>('/snapshot', {
         schema: {
-            tags: ['voters'],
+            tags: ['producers'],
             querystring: producerSnapshotQuerystring,
             response: {
-                200: producerSnapshotResponseSchema,
+                200: snapshotResponse,
                 404: errorResponse
             }
         }
@@ -63,7 +67,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             })
         }
         const producers: any = row.snapshot
-        const producersResponse: ProducersResponse = {
+        const producersResponse: SnapshotResponse = {
             producers,
             date: Number(row.date)
         }

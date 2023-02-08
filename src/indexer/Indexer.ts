@@ -1,19 +1,22 @@
 import {IndexerConfig} from "../types/configs";
 import {APIClient} from "@greymass/eosio";
 import axios, {AxiosInstance} from "axios";
+import axiosRetry from 'axios-retry';
 
 import {createPool, DatabasePool} from "slonik";
+import {createDbPool} from "../util/database";
 import {
     createQueryLoggingInterceptor
 } from 'slonik-interceptor-query-logging';
 
-import {makeRetryFetch, sleep} from "../util/utils";
-import {createLogger} from "../util/logger";
+import { makeRetryFetch, sleep } from "../util/utils";
+import { createLogger } from "../util/logger";
 import TokenPoller from "./jobs/token/TokenPoller";
 import VotePoller from "./jobs/voting/VoterPoller";
+import * as https from "https"
 
 const RUN_LOOP_SLEEP = 1000;
-const logger = createLogger('Indexer')
+const logger = createLogger('Indexer');
 
 export default class Indexer {
 
@@ -25,12 +28,16 @@ export default class Indexer {
     private voterPoller: VotePoller;
 
     private constructor(config: IndexerConfig) {
-        this.config = config;
-        const fetch = makeRetryFetch({delay: 1000, attempts: 100, silent: false})
-        this.antelopeCore = new APIClient({"url": this.config.nodeosUrl, fetch});
+
+        const fetch = makeRetryFetch({delay: config.fetchRetryDelay, attempts: config.fetchRetryCount, silent: false});
+        axiosRetry(axios, { retries: config.fetchRetryCount,  retryDelay: (retryCount: number) => { return (retryCount - 1) * config.fetchRetryDelay; }});
+
+        this.antelopeCore = new APIClient({"url": config.nodeosUrl, fetch});
         this.hyperion = axios.create({
-            baseURL: this.config.hyperionUrl
+            baseURL: config.hyperionUrl,
+            httpsAgent: new https.Agent({ keepAlive: true }),
         });
+        this.config = config;
 
         // must happen last, jobs may use the above in constructors
         this.tokenPoller = new TokenPoller(this);
@@ -39,39 +46,31 @@ export default class Indexer {
 
     static async create(config: IndexerConfig) {
         const indexer: Indexer = new Indexer(config);
-        await indexer.createDbPool();
+        await indexer.createDbPool(config);
+        if(!indexer.dbPool) throw 'Could not create database pool, aborting...';
         return indexer;
     }
 
 
-    private async createDbPool() {
-        const {dbHost, dbName, dbUser, dbPass, dbPort} = this.config;
-        const interceptors = [
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            createQueryLoggingInterceptor()
-        ];
-
-        // TODO: configure this or just disable in production code
-        //const opts = {interceptors};
-        const opts = {};
-
+    private async createDbPool(config: IndexerConfig) {
         try {
-            const connectionString = `postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}`;
-            this.dbPool = await createPool(connectionString, opts);
+            this.dbPool = await createDbPool(config);
+            return true;
         } catch (e) {
-            logger.error(`Failed creating db pool`, e);
+            logger.error(`Failed creating db pool: ${e}`);
         }
+        return false;
     }
 
     async run() {
-        await this.initAll()
+        await this.initAll();
         while (true) {
             try {
-                await this.runAll()
+                await this.runAll();
             } catch (e) {
-                logger.error(`Error in run loop`, e)
+                logger.error(`Error in run loop : ${e}`);
             }
-            await sleep(RUN_LOOP_SLEEP)
+            await sleep(RUN_LOOP_SLEEP);
         }
     }
 
