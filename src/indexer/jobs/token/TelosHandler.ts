@@ -187,7 +187,7 @@ const handleDelegationAction = async (actionName: any, token: Token, startISO: s
     }
 
 }
-const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
+export const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
     logger.debug(`Deleting or decrementing delegation from ${from} to ${to}`);
     try {
         const row = await indexer.dbPool?.maybeOne(sql`SELECT cpu, net FROM delegations WHERE from_account = ${String(from)} AND to_account = ${String(to)}`);
@@ -215,7 +215,7 @@ const deleteOrDecrementDelegation = async (token: Token, indexer: Indexer, from:
         logger.error(`Could not decrement or delete delegation from ${from} to ${to}: ${e} `);
     }
 }
-const insertOrIncrementDelegation = async (token: Token,indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
+export const insertOrIncrementDelegation = async (token: Token, indexer: Indexer, from: string, to: string, cpuAmount: string, netAmount: string, block: number) => {
     logger.debug(`Incrementing or inserting delegation from ${from} to ${to}`);
     const cpu = toWei(cpuAmount, indexer.config.baseCurrencyDecimals);
     const net =  toWei(netAmount, indexer.config.baseCurrencyDecimals);
