@@ -19,7 +19,7 @@ const holdersPathParams = Type.Object({
 type HoldersPathParams = Static<typeof holdersPathParams>
 type PaginationQueryParams = Static<typeof paginationQueryParams>
 
-const holdersRow = Type.Object({
+const holdersResponseRow = Type.Object({
     account: Type.String({
         example: 'accountname',
         description: 'Account name'
@@ -41,7 +41,7 @@ const holdersRow = Type.Object({
         description: `(${config.baseCurrencySymbol} only) A string representation of resource stake, possibly too large for a Number type, use a big number library to consume it as a number`
     })),
 })
-type HoldersRow = Static<typeof holdersRow>
+type HoldersResponseRow = Static<typeof holdersResponseRow>
 
 const holdersQueryRow = z.object({
     account: z.string(),
@@ -53,7 +53,7 @@ const holdersQueryRow = z.object({
 type HoldersQueryRow = z.infer<typeof holdersQueryRow>;
 
 
-const holdersResponseSchema = Type.Object({
+const holdersResponse = Type.Object({
     totalHolders: Type.Number({
         example: 13313,
         description: 'The total count of holders for that token'
@@ -62,10 +62,10 @@ const holdersResponseSchema = Type.Object({
         example: '123456789.0123456789',
         description: 'A string representation of supply, possibly too large for a Number type, use a big number library to consume it as a number'
     }),
-    holders: Type.Array(holdersRow)
+    holders: Type.Array(holdersResponseRow)
 });
 
-type HoldersResponse = Static<typeof holdersResponseSchema>
+type HoldersResponse = Static<typeof holdersResponse>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Params: HoldersPathParams, Reply: HoldersResponse | ErrorResponseType, Querystring: PaginationQueryParams }>('/holders/:contract/:symbol', {
@@ -74,7 +74,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             params: holdersPathParams,
             querystring: paginationQueryParams,
             response: {
-                200: holdersResponseSchema,
+                200: holdersResponse,
                 404: errorResponse
             }
         }
@@ -83,7 +83,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const id = `${request.params.contract.toLowerCase()}:${request.params.symbol.toUpperCase()}`
         const limit = request.query.limit || 100;
         const offset = request.query.offset || 0;
-        const token = await fastify.dbPool.one(sql`SELECT * FROM tokens WHERE id = ${id} LIMIT 1`);
+        const token = await fastify.dbPool.maybeOne(sql`SELECT * FROM tokens WHERE id = ${id} LIMIT 1`);
         if (!token) {
             return reply.status(404).send({
                 message: `Unable to find token with id ${id}`,
@@ -94,10 +94,16 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
 
         const holders = await fastify.dbPool.any(sql.type(holdersQueryRow)`SELECT total_balance, liquid_balance, rex_stake, resource_stake, account FROM balances WHERE token = ${id} ORDER BY total_balance DESC LIMIT ${limit} OFFSET ${offset}`)
         const holdersCount = await fastify.dbPool.maybeOne(sql`SELECT COUNT(*) as total FROM balances WHERE token = ${id}`)
+        if (!holdersCount) {
+            return reply.status(404).send({
+                message: `Could not find any holders for token with id ${id}`,
+                details: `Try again later or with a different token`
+            })
+        }
         const holdersResponse: HoldersResponse = {
             totalHolders: (holdersCount) ? holdersCount.total as number: 0,
             totalSupply: String(token.supply).split(' ')[0],
-            holders: holders.map((balanceRow: HoldersQueryRow): HoldersRow => {
+            holders: holders.map((balanceRow: HoldersQueryRow): HoldersResponseRow => {
                 if(id === `${config.baseCurrencyContract}:${config.baseCurrencySymbol}`){
                     return {
                         account: balanceRow.account,

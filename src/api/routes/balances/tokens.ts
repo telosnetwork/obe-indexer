@@ -55,7 +55,7 @@ const tokensQueryRow = z.object({
 type TokensQueryRow = z.infer<typeof tokensQueryRow>;
 
 
-const tokensResponseSchema = Type.Object({
+const tokensResponse = Type.Object({
     totalTokens: Type.Number({
         example: 1,
         description: 'The total count of different tokens for that account'
@@ -63,7 +63,7 @@ const tokensResponseSchema = Type.Object({
     tokens: Type.Array(tokenRow)
 });
 
-type TokensResponse = Static<typeof tokensResponseSchema>
+type TokensResponse = Static<typeof tokensResponse>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Params: TokensPathParams, Reply: TokensResponse | ErrorResponseType, Querystring: PaginationQueryParams }>('/:account', {
@@ -72,7 +72,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             params: tokensPathParams,
             querystring: paginationQueryParams,
             response: {
-                200: tokensResponseSchema,
+                200: tokensResponse,
                 404: errorResponse
             }
         }
@@ -82,7 +82,13 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const offset = request.query.offset || 0;
         const account = request.params.account.toLowerCase();
 
-        const tokens = await fastify.dbPool.any(sql.type(tokensQueryRow)`SELECT token, total_balance, liquid_balance, rex_stake, resource_stake, account FROM balances WHERE account = ${account} ORDER BY total_balance DESC LIMIT ${limit} OFFSET ${offset}`)
+        const tokens = await fastify.dbPool.any(sql.type(tokensQueryRow)`SELECT token, total_balance, liquid_balance, rex_stake, resource_stake, account FROM balances WHERE account = ${account} ORDER BY total_balance DESC LIMIT ${limit} OFFSET ${offset}`);
+        if(tokens.length === 0){
+            return reply.status(404).send({
+                message: 'Unable to find any balances for that account name',
+                details: 'Unable to find any balances for that account name'
+            });
+        }
         const tokensCount = await fastify.dbPool.maybeOne(sql`SELECT COUNT(*) as total FROM balances WHERE account = ${account}`);
         const tokensResponse: TokensResponse = {
             totalTokens: (tokensCount) ? tokensCount.total as number: 0,

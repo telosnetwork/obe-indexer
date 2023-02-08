@@ -35,7 +35,7 @@ const delegationQueryRow = z.object({
 })
 type DelegationQueryRow = z.infer<typeof delegationQueryRow>;
 
-const delegationRow = Type.Object({
+const delegationResponseRow = Type.Object({
     from: Type.String({
         example: 'delegatooorr',
         description: 'Account name for the account that has delegated staked resources'
@@ -54,13 +54,13 @@ const delegationRow = Type.Object({
     }),
 })
 
-type DelegationRow = Static<typeof delegationRow>
+type DelegationResponseRow = Static<typeof delegationResponseRow>
 
-const delegationsResponseSchema = Type.Object({
-    delegations: Type.Array(delegationRow)
+const delegationsResponse = Type.Object({
+    delegations: Type.Array(delegationResponseRow)
 })
 
-type DelegationsResponse = Static<typeof delegationsResponseSchema>
+type DelegationsResponse = Static<typeof delegationsResponse>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Querystring: DelegationsQueryString, Reply: DelegationsResponse | ErrorResponseType }>('/delegations', {
@@ -68,7 +68,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             tags: ['tokens'],
             querystring: delegationsQueryString,
             response: {
-                200: delegationsResponseSchema,
+                200: delegationsResponse,
                 404: errorResponse
             }
         }
@@ -78,7 +78,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const from = request.query.from
         const to = request.query.to
         if (!from && !to) {
-            reply.status(404).send({
+            return reply.status(404).send({
                 message: `Missing to or from`,
                 details: `Must specify a to or a from account when querying for delegations`
             })
@@ -95,9 +95,15 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             ${from}`)
         }
         const query = sql.type(delegationQueryRow)`SELECT from_account, to_account, cpu, net FROM delegations WHERE ${sql.join(components, sql` AND `)} LIMIT ${limit} OFFSET ${offset}`;
-        const delegationsResult = await fastify.dbPool.any(query)
+        const delegationsResult = await fastify.dbPool.any(query);
+        if(delegationsResult.length === 0){
+            return reply.status(404).send({
+                message: 'Unable to find any delegations',
+                details: `Unable to find any delegations for the account name specified`
+            });
+        }
         const delegationsResponse: DelegationsResponse = {
-            delegations: delegationsResult.map((row: DelegationQueryRow): DelegationRow => {
+            delegations: delegationsResult.map((row: DelegationQueryRow): DelegationResponseRow => {
                 return {
                     from: row.from_account,
                     to: row.to_account,

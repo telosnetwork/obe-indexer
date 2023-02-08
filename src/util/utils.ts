@@ -145,7 +145,7 @@ export const paginateTableQuery = async (api: APIClient, query: any, callback: F
 }
 
 
-export const getTableLastBlock = async (table: string, indexer: Indexer) => {
+export const getTableLastBlock = async (table: string, indexer: Indexer): Promise<number> => {
     try {
         const row = await indexer.dbPool?.maybeOne(sql`SELECT MAX(block) as block FROM ${sql.identifier([table])}`);
         if (row) {
@@ -158,13 +158,13 @@ export const getTableLastBlock = async (table: string, indexer: Indexer) => {
 }
 
 /* BLOCKS */
-export const getBlockISO = async (block: number, indexer: Indexer) => {
+export const getBlockISO = async (block: number, indexer: Indexer): Promise<string> => {
     const blockResponse = await indexer.antelopeCore.v1.chain.get_block(block);
     return new Date(blockResponse.timestamp.toMilliseconds()).toISOString();
 }
 
 /* MISC */
-export const sleep = (ms: number) => {
+export const sleep = (ms: number): Promise<any> => {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
 

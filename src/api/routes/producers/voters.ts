@@ -14,7 +14,7 @@ const votersQueryParams = Type.Object({
 type VotersQueryParams = Static<typeof votersQueryParams>
 type PaginationQueryParams = Static<typeof paginationQueryParams>
 
-const votersRow = Type.Object({
+const votersResponseRow = Type.Object({
     voter: Type.String({
         example: 'accountname',
         description: 'Account name'
@@ -24,6 +24,7 @@ const votersRow = Type.Object({
         description: 'A string representation of vote weight, possibly too large for a Number type, use a big number library to consume it as a number'
     }),
 })
+type VotersResponseRow = Static<typeof votersResponseRow>
 
 const votersQueryRow = z.object({
     voter: z.string(),
@@ -31,17 +32,14 @@ const votersQueryRow = z.object({
 })
 type VotersQueryRow = z.infer<typeof votersQueryRow>;
 
-type VotersRow = Static<typeof votersRow>
-
-const votersResponseSchema = Type.Object({
-    totalVoters: Type.String({
-        example: '112',
-        description: 'A string representation of the total count of voters for this producer, possibly too large for a Number type, use a big number library to consume it as a number'
+const votersResponse = Type.Object({
+    totalVoters: Type.Number({
+        example: 112,
+        description: 'The total count of voters for the producer'
     }),
-    voters: Type.Array(votersRow)
+    voters: Type.Array(votersResponseRow)
 })
-
-type VotersResponse = Static<typeof votersResponseSchema>
+type VotersResponse = Static<typeof votersResponse>
 
 export default async (fastify: FastifyInstance, options: FastifyServerOptions) => {
     fastify.get<{ Params: VotersQueryParams, Reply: VotersResponse | ErrorResponseType, Querystring: PaginationQueryParams }>('/voters/:producer', {
@@ -50,7 +48,7 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
             params: votersQueryParams,
             querystring: paginationQueryParams,
             response: {
-                200: votersResponseSchema,
+                200: votersResponse,
                 404: errorResponse
             }
         }
@@ -61,8 +59,8 @@ export default async (fastify: FastifyInstance, options: FastifyServerOptions) =
         const voters = await fastify.dbPool.any(query)
         const votersCount = await fastify.dbPool.maybeOne(sql`SELECT COUNT(*) as count FROM voters WHERE ${request.params.producer}=ANY(producers)`)
         const votersResponse: VotersResponse = {
-            totalVoters: (votersCount) ? votersCount.count as string : '0',
-            voters: voters.map((row: VotersQueryRow): VotersRow => {
+            totalVoters: (votersCount) ? votersCount.count as number : 0,
+            voters: voters.map((row: VotersQueryRow): VotersResponseRow => {
                 return {
                     voter: row.voter,
                     vote_weight: (parseInt(row.vote_weight) / 10000).toFixed(4)
